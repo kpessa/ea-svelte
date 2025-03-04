@@ -18,11 +18,18 @@
 - [x] Implement configuration editor with CodeMirror
 
 ## Story 3: Main UI Components
-- [ ] Create tab navigation component
-- [ ] Implement criteria panel
-- [ ] Build orders panel with sections
-- [ ] Create order selection interface
-- [ ] Implement debug mode toggle
+- [x] Create tab navigation component
+- [x] Implement criteria panel
+- [x] Build orders panel with sections
+- [x] Create order selection interface
+- [x] Implement debug mode toggle
+
+## Story 3b: Order Display and Debug Enhancements
+- [x] Fix orders not displaying in order sections
+- [x] Enable HTML rendering in section headers
+- [x] Enhance debug mode to show concept expressions
+- [x] Improve order section visibility and styling
+- [x] Add concept evaluation indicators
 
 ## Story 4: Test Patient Management
 - [ ] Create test patient manager interface

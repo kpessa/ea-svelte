@@ -1,180 +1,115 @@
 <script lang="ts">
-    import type { Tab } from '$lib/types';
-    import { evaluateOrderSectionVisibility, evaluateOrderVisibility } from '$lib/utils/evaluation';
+    import type { Tab } from '../types';
+    import { configStore } from '../services/configService';
 
-    export let tab: Tab;
+    export let selectedTab: Tab;
+    export let debugMode = false;
 
-    function evaluateOrders() {
-        return tab.orderSections
-            .map(section => {
-                const sectionResult = evaluateOrderSectionVisibility(section, tab.criteria);
-                if (!sectionResult.visible) {
-                    return null;
-                }
+    $: currentTab = $configStore?.RCONFIG.TABS.find(tab => tab.TAB_KEY === selectedTab);
+    $: orderSections = currentTab?.ORDER_SECTIONS || [];
+    $: enabledCriteria = currentTab?.CRITERIA.filter(c => c.enabled) || [];
 
-                return {
-                    ...section,
-                    orders: section.orders
-                        .map(order => {
-                            const orderResult = evaluateOrderVisibility(order, tab.criteria);
-                            return orderResult.visible ? order : null;
-                        })
-                        .filter((order): order is NonNullable<typeof order> => order !== null)
-                };
-            })
-            .filter((section): section is NonNullable<typeof section> => section !== null);
+    // Evaluate if a section should be shown based on its concept expression
+    // This is a simplified version - in a real app, you would evaluate the expression
+    function shouldShowSection(conceptName: string): boolean {
+        // For demo purposes, we'll just show all sections
+        // In a real implementation, this would evaluate the concept expression
+        return true;
     }
 
-    $: visibleOrders = evaluateOrders();
-
-    function toggleOrder(sectionId: string, orderId: string) {
-        // TODO: Implement order selection logic
-        console.log('Toggle order:', sectionId, orderId);
+    // For demo purposes, we'll simulate concept evaluation
+    function evaluateConceptExpression(expression: string): boolean {
+        // This is a simplified evaluation for demo purposes
+        // In a real app, you would parse and evaluate the expression
+        return true;
     }
 </script>
 
-<div class="space-y-6">
-    {#each visibleOrders as section}
-        <div>
-            <h3 class="text-sm font-medium text-gray-900 mb-3">{section.name}</h3>
-            <div class="space-y-2">
-                {#each section.orders as order}
-                    <div class="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                        <div class="flex-shrink-0">
-                            {#if order.type === 'medication'}
-                                <svg class="h-5 w-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                                </svg>
-                            {:else if order.type === 'lab'}
-                                <svg class="h-5 w-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
+<div class="orders-panel">
+    <h2 class="text-xl font-semibold mb-4">{currentTab?.TAB_NAME || ''} Orders</h2>
+    {#if orderSections.length > 0}
+        <div class="space-y-6">
+            {#each orderSections as section}
+                {@const isConceptTrue = evaluateConceptExpression(section.CONCEPT_NAME)}
+                {#if shouldShowSection(section.CONCEPT_NAME)}
+                    <div class="bg-white shadow rounded-lg p-6 border-t-4 border-blue-500 hover:shadow-lg transition-shadow duration-200">
+                        {#if debugMode}
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="text-xs font-mono bg-gray-100 p-2 rounded overflow-x-auto border border-gray-200 flex-1 mr-2">
+                                    <code class="text-purple-600">{section.CONCEPT_NAME}</code>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    {#if isConceptTrue}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-green-400" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3" />
+                                            </svg>
+                                            True
+                                        </span>
+                                    {:else}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-red-400" fill="currentColor" viewBox="0 0 8 8">
+                                                <circle cx="4" cy="4" r="3" />
+                                            </svg>
+                                            False
+                                        </span>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+                        <h3 class="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-200">
+                            {@html section.SECTION_NAME}
+                        </h3>
+                        <div class="space-y-4">
+                            {#if section.ORDERS && section.ORDERS.length > 0}
+                                {#each section.ORDERS as order}
+                                    <div class="border-l-4 border-green-500 bg-green-50 p-4 rounded-lg hover:bg-green-100 transition-colors duration-200 shadow-sm">
+                                        <div class="flex items-start">
+                                            <div class="flex-1">
+                                                <p class="text-sm font-medium text-gray-900">{order.MNEMONIC}</p>
+                                                <p class="mt-1 text-sm text-gray-600">{order.ORDER_SENTENCE}</p>
+                                                {#if order.COMMENT}
+                                                    <div class="mt-2 text-sm text-gray-600 bg-white p-2 rounded border border-gray-200">
+                                                        {@html order.COMMENT}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                            <div class="ml-4">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="form-checkbox h-5 w-5 text-blue-600"
+                                                    disabled={section.SINGLE_SELECT === 1 && false} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/each}
                             {:else}
-                                <svg class="h-5 w-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
+                                <div class="text-center text-gray-500 py-4 bg-gray-50 rounded-lg">
+                                    No orders in this section
+                                </div>
                             {/if}
                         </div>
-                        <div class="flex-1">
-                            <h4 class="text-sm font-medium text-gray-900">{order.name}</h4>
-                            <p class="text-sm text-gray-500 mt-1">{order.details}</p>
-                        </div>
                     </div>
-                {/each}
-            </div>
-        </div>
-    {/each}
-</div>
-
-<div class="orders-panel">
-    <h2>Recommended Orders</h2>
-    {#if visibleOrders.length > 0}
-        <div class="order-actions">
-            <button class="btn primary">Sign Orders</button>
+                {/if}
+            {/each}
         </div>
     {:else}
-        <div class="no-orders">
-            No orders available for the current patient state
+        <div class="text-center text-gray-500 py-8 bg-white shadow rounded-lg">
+            No orders available
         </div>
     {/if}
 </div>
 
 <style>
-    .orders-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
+    :global(.form-checkbox) {
+        border-radius: 0.25rem;
+        border-color: #d1d5db;
     }
 
-    h2 {
-        margin: 0;
-        color: #2c3e50;
-    }
-
-    .order-sections {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-
-    .order-section {
-        padding: 1rem;
-        background-color: #f8f9fa;
-        border-radius: 4px;
-        border-left: 4px solid #2ecc71;
-    }
-
-    .order-section h3 {
-        margin: 0 0 1rem 0;
-        color: #2c3e50;
-    }
-
-    .orders-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-
-    .order-item {
-        padding: 0.5rem;
-        background-color: white;
-        border-radius: 4px;
-    }
-
-    .order-checkbox {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        cursor: pointer;
-    }
-
-    .order-name {
-        font-weight: 500;
-        color: #2c3e50;
-    }
-
-    .order-description {
-        margin: 0.25rem 0 0 1.5rem;
-        font-size: 0.9rem;
-        color: #666;
-    }
-
-    .debug-info {
-        margin-top: 0.5rem;
-        padding-top: 0.5rem;
-        border-top: 1px solid #ddd;
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-    }
-
-    .debug-info small {
-        color: #666;
-    }
-
-    .order-actions {
-        margin-top: auto;
-        padding-top: 1rem;
-        border-top: 1px solid #ddd;
-    }
-
-    .btn {
-        padding: 0.5rem 1rem;
-        border: none;
-        border-radius: 4px;
-        background-color: #3498db;
-        color: white;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-
-    .btn:hover {
-        background-color: #2980b9;
-    }
-
-    .no-orders {
-        text-align: center;
-        color: #666;
-        padding: 2rem;
+    :global(.form-checkbox:focus) {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        border-color: #3b82f6;
     }
 </style> 
