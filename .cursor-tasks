@@ -31,12 +31,19 @@
 - [x] Improve order section visibility and styling
 - [x] Add concept evaluation indicators
 
+## Story 3c: Clinical UI Styling
+- [x] Implement patient header with demographics
+- [x] Style tabs to match clinical system
+- [x] Create clinical-style order sections
+- [x] Implement checkbox and radio button styling
+- [x] Add edit/collapse buttons for sections
+
 ## Story 4: Test Patient Management
-- [ ] Create test patient manager interface
-- [ ] Implement test case creation/editing
-- [ ] Add test case application functionality
-- [ ] Create test patient data persistence
-- [ ] Add test case validation
+- [x] Create test patient manager interface
+- [x] Implement test case creation/editing
+- [x] Add test case application functionality
+- [x] Create test patient data persistence
+- [x] Add test case validation
 
 ## Story 5: Concept Management
 - [ ] Create concept manager interface
