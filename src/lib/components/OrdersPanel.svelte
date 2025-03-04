@@ -1,12 +1,28 @@
 <script lang="ts">
     import type { Tab } from '$lib/types';
-    import { evaluateConceptExpression, debugMode } from '../stores';
+    import { evaluateOrderSectionVisibility, evaluateOrderVisibility } from '$lib/utils/evaluation';
 
     export let tab: Tab;
 
     function evaluateOrders() {
-        // TODO: Implement order evaluation logic based on criteria values
-        return tab.orderSections;
+        return tab.orderSections
+            .map(section => {
+                const sectionResult = evaluateOrderSectionVisibility(section, tab.criteria);
+                if (!sectionResult.visible) {
+                    return null;
+                }
+
+                return {
+                    ...section,
+                    orders: section.orders
+                        .map(order => {
+                            const orderResult = evaluateOrderVisibility(order, tab.criteria);
+                            return orderResult.visible ? order : null;
+                        })
+                        .filter((order): order is NonNullable<typeof order> => order !== null)
+                };
+            })
+            .filter((section): section is NonNullable<typeof section> => section !== null);
     }
 
     $: visibleOrders = evaluateOrders();

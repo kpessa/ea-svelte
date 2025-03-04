@@ -11,7 +11,7 @@ export interface TestCase {
 
 export interface OrderSection {
     id: string;
-    title: string;
+    name: string;
     visibilityExpression: string;
     orders: Order[];
 }
@@ -19,25 +19,39 @@ export interface OrderSection {
 export interface Order {
     id: string;
     name: string;
-    description?: string;
-    selected?: boolean;
+    type: 'medication' | 'lab' | 'procedure';
+    details: string;
+    visibilityExpression?: string;
 }
 
 export interface Tab {
     id: string;
     name: string;
-    criteria: Criteria[];
+    criteria: Criterion[];
     orderSections: OrderSection[];
 }
 
-export interface Criteria {
+export interface Criterion {
     id: string;
-    title: string;
-    description: string;
-    visibilityExpression: string;
+    name: string;
+    type: 'numeric' | 'boolean' | 'select';
+    value?: number | boolean | string;
+    options?: string[];
+    unit?: string;
+    validation?: {
+        min?: number;
+        max?: number;
+        required?: boolean;
+    };
+    visibilityExpression?: string;
 }
 
 export interface Config {
     tabs: Tab[];
     testCases: TestCase[];
+}
+
+export interface EvaluationResult {
+    visible: boolean;
+    reason?: string;
 } 
