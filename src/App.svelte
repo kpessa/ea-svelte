@@ -6,6 +6,7 @@
   import ConfigEditor from './lib/components/ConfigEditor.svelte';
   import PatientHeader from './lib/components/PatientHeader.svelte';
   import TestPatientManager from './lib/components/TestPatientManager.svelte';
+  import ConceptManager from './lib/components/ConceptManager.svelte';
   import { ConfigService, configStore } from './lib/services/configService';
   import type { Tab } from './lib/types';
   import './app.css';
@@ -77,6 +78,7 @@
   {/if}
   
   <TestPatientManager />
+  <ConceptManager />
 </div>
 
 <style>

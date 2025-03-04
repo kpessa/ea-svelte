@@ -46,11 +46,11 @@
 - [x] Add test case validation
 
 ## Story 5: Concept Management
-- [ ] Create concept manager interface
-- [ ] Implement concept state editor
-- [ ] Add concept expression evaluator
-- [ ] Create concept validation system
-- [ ] Implement concept persistence
+- [x] Create concept manager interface
+- [x] Implement concept state editor
+- [x] Add concept expression evaluator
+- [x] Create concept validation system
+- [x] Implement concept persistence
 
 ## Story 6: Styling and Polish
 - [ ] Set up base styling system
