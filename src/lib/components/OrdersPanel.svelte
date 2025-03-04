@@ -9,8 +9,15 @@
     $: orderSections = currentTab?.ORDER_SECTIONS || [];
     $: enabledCriteria = currentTab?.CRITERIA.filter(c => c.enabled) || [];
 
+    // Track which sections are collapsed
+    let collapsedSections: Record<number, boolean> = {};
+
+    function toggleSection(sectionIndex: number): void {
+        collapsedSections[sectionIndex] = !collapsedSections[sectionIndex];
+        collapsedSections = {...collapsedSections}; // Trigger reactivity
+    }
+
     // Evaluate if a section should be shown based on its concept expression
-    // This is a simplified version - in a real app, you would evaluate the expression
     function shouldShowSection(conceptName: string): boolean {
         // For demo purposes, we'll just show all sections
         // In a real implementation, this would evaluate the concept expression
@@ -25,91 +32,253 @@
     }
 </script>
 
-<div class="orders-panel">
-    <h2 class="text-xl font-semibold mb-4">{currentTab?.TAB_NAME || ''} Orders</h2>
+<div class="clinical-orders-panel">
+
     {#if orderSections.length > 0}
-        <div class="space-y-6">
-            {#each orderSections as section}
+        <div class="order-sections">
+            {#each orderSections as section, i}
                 {@const isConceptTrue = evaluateConceptExpression(section.CONCEPT_NAME)}
                 {#if shouldShowSection(section.CONCEPT_NAME)}
-                    <div class="bg-white shadow rounded-lg p-6 border-t-4 border-blue-500 hover:shadow-lg transition-shadow duration-200">
-                        {#if debugMode}
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="text-xs font-mono bg-gray-100 p-2 rounded overflow-x-auto border border-gray-200 flex-1 mr-2">
-                                    <code class="text-purple-600">{section.CONCEPT_NAME}</code>
-                                </div>
-                                <div class="flex-shrink-0">
-                                    {#if isConceptTrue}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-green-400" fill="currentColor" viewBox="0 0 8 8">
-                                                <circle cx="4" cy="4" r="3" />
-                                            </svg>
-                                            True
-                                        </span>
-                                    {:else}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                            <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-red-400" fill="currentColor" viewBox="0 0 8 8">
-                                                <circle cx="4" cy="4" r="3" />
-                                            </svg>
-                                            False
-                                        </span>
-                                    {/if}
+                    {#if debugMode}
+                        <div class="debug-section">
+                            <div class="section-title">Debug: {section.SECTION_NAME}</div>
+                            <div class="section-content">
+                                <div class="debug-info">
+                                    <div class="debug-expression-item">
+                                        <span class="debug-label">Expression:</span>
+                                        <code>{section.CONCEPT_NAME}</code>
+                                    </div>
+                                    <div class="debug-expression-item">
+                                        <span class="debug-label">Evaluation:</span>
+                                        {#if isConceptTrue}
+                                            <span class="concept-true">True</span>
+                                        {:else}
+                                            <span class="concept-false">False</span>
+                                        {/if}
+                                    </div>
+                                    <div class="debug-expression-item">
+                                        <span class="debug-label">Orders:</span>
+                                        <span>{section.ORDERS?.length || 0}</span>
+                                    </div>
+                                    <div class="debug-expression-item">
+                                        <span class="debug-label">Single Select:</span>
+                                        <span>{section.SINGLE_SELECT === 1 ? 'Yes' : 'No'}</span>
+                                    </div>
                                 </div>
                             </div>
-                        {/if}
-                        <h3 class="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-200">
-                            {@html section.SECTION_NAME}
-                        </h3>
-                        <div class="space-y-4">
-                            {#if section.ORDERS && section.ORDERS.length > 0}
-                                {#each section.ORDERS as order}
-                                    <div class="border-l-4 border-green-500 bg-green-50 p-4 rounded-lg hover:bg-green-100 transition-colors duration-200 shadow-sm">
-                                        <div class="flex items-start">
-                                            <div class="flex-1">
-                                                <p class="text-sm font-medium text-gray-900">{order.MNEMONIC}</p>
-                                                <p class="mt-1 text-sm text-gray-600">{order.ORDER_SENTENCE}</p>
-                                                {#if order.COMMENT}
-                                                    <div class="mt-2 text-sm text-gray-600 bg-white p-2 rounded border border-gray-200">
-                                                        {@html order.COMMENT}
-                                                    </div>
-                                                {/if}
-                                            </div>
-                                            <div class="ml-4">
-                                                <input 
-                                                    type="checkbox" 
-                                                    class="form-checkbox h-5 w-5 text-blue-600"
-                                                    disabled={section.SINGLE_SELECT === 1 && false} 
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                {/each}
-                            {:else}
-                                <div class="text-center text-gray-500 py-4 bg-gray-50 rounded-lg">
-                                    No orders in this section
-                                </div>
-                            {/if}
                         </div>
+                    {/if}
+                    <div class="order-section">
+                        <div class="section-header">
+                            <div class="section-title-row">
+                                <div class="section-title">
+                                    {@html section.SECTION_NAME}
+                                </div>
+                                <div class="section-controls">
+                                    <button class="edit-button">Edit</button>
+                                    <button class="collapse-button" on:click={() => toggleSection(i)}>
+                                        {collapsedSections[i] ? '▼' : '▲'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {#if !collapsedSections[i]}
+                            <div class="section-content">
+                                {#if section.ORDERS && section.ORDERS.length > 0}
+                                    <div class="orders-list">
+                                        {#each section.ORDERS as order}
+                                            <div class="order-item">
+                                                <div class="order-checkbox">
+                                                    {#if section.SINGLE_SELECT === 1}
+                                                        <input type="radio" name={`section-${i}`} class="radio-input" />
+                                                    {:else}
+                                                        <input type="checkbox" class="checkbox-input" />
+                                                    {/if}
+                                                </div>
+                                                <div class="order-details">
+                                                    <div class="order-name">{order.MNEMONIC}</div>
+                                                    <div class="order-sentence">{order.ORDER_SENTENCE}</div>
+                                                    {#if order.COMMENT}
+                                                        <div class="order-comment">
+                                                            {@html order.COMMENT}
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="no-orders">
+                                        No orders in this section
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             {/each}
         </div>
     {:else}
-        <div class="text-center text-gray-500 py-8 bg-white shadow rounded-lg">
+        <div class="no-orders-available">
             No orders available
         </div>
     {/if}
 </div>
 
 <style>
-    :global(.form-checkbox) {
-        border-radius: 0.25rem;
-        border-color: #d1d5db;
+    .clinical-orders-panel {
+        font-family: Arial, sans-serif;
+        color: #333;
     }
 
-    :global(.form-checkbox:focus) {
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
-        border-color: #3b82f6;
+    .ordered-by-section, .debug-section {
+        border: 1px solid #ccc;
+        margin-bottom: 10px;
+    }
+
+    .section-title {
+        font-weight: bold;
+        padding: 5px;
+    }
+
+    .ordered-by-section .section-title, .debug-section .section-title {
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ccc;
+    }
+
+    .debug-section .section-title {
+        background-color: #e6f7ff;
+        color: #0056b3;
+    }
+
+    .ordered-by-section .section-content, .debug-section .section-content {
+        padding: 5px;
+    }
+
+    .debug-info {
+        font-size: 12px;
+        font-family: Arial, sans-serif;
+    }
+
+    .debug-expression-item {
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+    }
+
+    .debug-label {
+        font-weight: bold;
+        margin-right: 5px;
+        min-width: 100px;
+    }
+
+    code {
+        font-family: monospace;
+        background-color: #f5f5f5;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 11px;
+    }
+
+    .order-section {
+        border: 1px solid #ccc;
+        margin-bottom: 20px;
+    }
+
+    .section-header {
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ccc;
+    }
+
+    .section-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px;
+    }
+
+    .section-controls {
+        display: flex;
+        gap: 5px;
+    }
+
+    .edit-button, .collapse-button {
+        background-color: #f0f0f0;
+        border: 1px solid #ccc;
+        padding: 2px 5px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+    .edit-button:hover, .collapse-button:hover {
+        background-color: #e0e0e0;
+    }
+
+    .section-content {
+        padding: 5px;
+    }
+
+    .orders-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .order-item {
+        display: flex;
+        padding: 5px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .order-checkbox {
+        margin-right: 10px;
+        display: flex;
+        align-items: flex-start;
+        padding-top: 3px;
+    }
+
+    .checkbox-input, .radio-input {
+        width: 16px;
+        height: 16px;
+    }
+
+    .order-details {
+        flex: 1;
+    }
+
+    .order-name {
+        font-weight: bold;
+        margin-bottom: 3px;
+    }
+
+    .order-sentence {
+        font-size: 13px;
+        margin-bottom: 3px;
+    }
+
+    .order-comment {
+        font-size: 12px;
+        color: #555;
+        margin-top: 5px;
+        padding: 5px;
+        background-color: #f9f9f9;
+        border-left: 3px solid #ddd;
+    }
+
+    .concept-true {
+        color: green;
+        font-weight: bold;
+    }
+
+    .concept-false {
+        color: red;
+        font-weight: bold;
+    }
+
+    .no-orders, .no-orders-available {
+        padding: 10px;
+        text-align: center;
+        color: #666;
     }
 </style> 
