@@ -11,11 +11,11 @@
 - [x] Create design rules and guidelines
 
 ## Story 2: Core Data Management
-- [ ] Create configuration loading system
-- [ ] Implement concept state management
-- [ ] Set up test patient data management
-- [ ] Create concept evaluation system
-- [ ] Implement configuration editor with CodeMirror
+- [x] Create configuration loading system
+- [x] Implement concept state management
+- [x] Set up test patient data management
+- [x] Create concept evaluation system
+- [x] Implement configuration editor with CodeMirror
 
 ## Story 3: Main UI Components
 - [ ] Create tab navigation component
