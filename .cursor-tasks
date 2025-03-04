@@ -1,0 +1,53 @@
+# Electrolyte Advisor Application Tasks
+
+## Story 1: Project Setup and Basic Structure
+- [x] Initialize Svelte 5 project with TypeScript support
+- [x] Set up project dependencies (jQuery, CodeMirror)
+- [x] Create basic project structure and directories
+- [x] Set up routing for tab navigation
+- [x] Create basic layout components (navbar, split panel)
+- [x] Configure Vite for Svelte 5
+- [x] Set up TypeScript configuration
+- [x] Create design rules and guidelines
+
+## Story 2: Core Data Management
+- [ ] Create configuration loading system
+- [ ] Implement concept state management
+- [ ] Set up test patient data management
+- [ ] Create concept evaluation system
+- [ ] Implement configuration editor with CodeMirror
+
+## Story 3: Main UI Components
+- [ ] Create tab navigation component
+- [ ] Implement criteria panel
+- [ ] Build orders panel with sections
+- [ ] Create order selection interface
+- [ ] Implement debug mode toggle
+
+## Story 4: Test Patient Management
+- [ ] Create test patient manager interface
+- [ ] Implement test case creation/editing
+- [ ] Add test case application functionality
+- [ ] Create test patient data persistence
+- [ ] Add test case validation
+
+## Story 5: Concept Management
+- [ ] Create concept manager interface
+- [ ] Implement concept state editor
+- [ ] Add concept expression evaluator
+- [ ] Create concept validation system
+- [ ] Implement concept persistence
+
+## Story 6: Styling and Polish
+- [ ] Set up base styling system
+- [ ] Create component-specific styles
+- [ ] Implement responsive design
+- [ ] Add animations and transitions
+- [ ] Polish UI/UX elements
+
+## Story 7: Testing and Documentation
+- [ ] Add unit tests for core functionality
+- [ ] Create integration tests
+- [ ] Write component documentation
+- [ ] Add user documentation
+- [ ] Perform final testing and bug fixes 

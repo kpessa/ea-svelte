@@ -1,0 +1,110 @@
+{
+    "tabs": [
+        {
+            "id": "magnesium",
+            "name": "Magnesium",
+            "criteria": [
+                {
+                    "id": "mag_low",
+                    "title": "Low Magnesium Level",
+                    "description": "Patient's magnesium level is below normal range",
+                    "visibilityExpression": "EALABMAGBTW00AND13"
+                },
+                {
+                    "id": "mag_valid",
+                    "title": "Valid Magnesium Result",
+                    "description": "Magnesium result is from within the last 4 hours",
+                    "visibilityExpression": "EACRITERIAVALIDMAGRESULT4H"
+                }
+            ],
+            "orderSections": [
+                {
+                    "id": "mag_orders",
+                    "title": "Magnesium Replacement Orders",
+                    "visibilityExpression": "EALABMAGBTW00AND13 && EACRITERIAVALIDMAGRESULT4H",
+                    "orders": [
+                        {
+                            "id": "mag_sulfate",
+                            "name": "Magnesium Sulfate 2g IV",
+                            "description": "Administer over 1 hour"
+                        },
+                        {
+                            "id": "mag_lab",
+                            "name": "Repeat Magnesium Level",
+                            "description": "Order 4 hours after administration"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "potassium",
+            "name": "Potassium",
+            "criteria": [
+                {
+                    "id": "k_low",
+                    "title": "Low Potassium Level",
+                    "description": "Patient's potassium level is below normal range",
+                    "visibilityExpression": "EALABKBTW00AND35"
+                }
+            ],
+            "orderSections": [
+                {
+                    "id": "k_orders",
+                    "title": "Potassium Replacement Orders",
+                    "visibilityExpression": "EALABKBTW00AND35",
+                    "orders": [
+                        {
+                            "id": "k_chloride",
+                            "name": "Potassium Chloride 20mEq IV",
+                            "description": "Administer over 1 hour"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "phosphate",
+            "name": "Phosphate",
+            "criteria": [
+                {
+                    "id": "phos_low",
+                    "title": "Low Phosphate Level",
+                    "description": "Patient's phosphate level is below normal range",
+                    "visibilityExpression": "EALABPHOSBTW00AND25"
+                }
+            ],
+            "orderSections": [
+                {
+                    "id": "phos_orders",
+                    "title": "Phosphate Replacement Orders",
+                    "visibilityExpression": "EALABPHOSBTW00AND25",
+                    "orders": [
+                        {
+                            "id": "phos_sodium",
+                            "name": "Sodium Phosphate 15mmol IV",
+                            "description": "Administer over 4 hours"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "testCases": [
+        {
+            "id": "tc1",
+            "name": "Low Magnesium Patient",
+            "concepts": {
+                "EALABMAGBTW00AND13": { "value": true, "isActive": true },
+                "EACRITERIAVALIDMAGRESULT4H": { "value": true, "isActive": true }
+            }
+        },
+        {
+            "id": "tc2",
+            "name": "Low Potassium Patient",
+            "concepts": {
+                "EALABKBTW00AND35": { "value": true, "isActive": true }
+            }
+        }
+    ]
+} 

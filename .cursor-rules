@@ -1,0 +1,37 @@
+# Design Rules and Dependencies
+
+## Framework and Core Dependencies
+- Use Svelte 5 as the front-end framework
+- Use TypeScript for type safety
+- Use Vite as the build tool
+- Use Svelte stores for state management
+- Use Tailwind CSS for styling
+
+## UI Components and Styling
+- Use Tailwind CSS for all styling
+- Follow Tailwind's utility-first approach
+- Use Tailwind's component classes for consistent styling
+- Implement responsive design using Tailwind's responsive prefixes
+- Use Tailwind's dark mode for theming
+- Keep custom styles minimal and only when necessary
+
+## Code Organization
+- Keep components in src/lib/components
+- Keep types in src/lib/types
+- Keep stores in src/lib/stores
+- Keep configuration in src/config
+- Keep custom Tailwind styles in src/styles
+
+## State Management
+- Use Svelte stores for global state
+- Keep component state local when possible
+- Use props for component communication
+- Use events for child-to-parent communication
+
+## Development Guidelines
+- Write TypeScript interfaces for all data structures
+- Use strict TypeScript settings
+- Follow Svelte 5 best practices
+- Keep components focused and single-responsibility
+- Use Tailwind's @apply directive sparingly
+- Follow Tailwind's mobile-first approach
