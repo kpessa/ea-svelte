@@ -35,3 +35,19 @@
 - Keep components focused and single-responsibility
 - Use Tailwind's @apply directive sparingly
 - Follow Tailwind's mobile-first approach
+
+## Version Control
+- Use Git for version control
+- Follow conventional commit format:
+  - feat: for new features
+  - fix: for bug fixes
+  - docs: for documentation changes
+  - style: for formatting changes
+  - refactor: for code refactoring
+  - test: for adding or modifying tests
+  - chore: for maintenance tasks
+- Write clear, descriptive commit messages
+- Keep commits focused and atomic (one logical change per commit)
+- Include relevant context in commit messages
+- Review changes before committing
+- Commit frequently with meaningful changes
