@@ -103,6 +103,11 @@
 - [x] Ensure filtering state persists across tab changes
 - [x] Implement smooth transitions for section visibility changes
 
+## Story 5g-1: OrdersPanel Debug Mode Enhancements
+- [x] Move concept expression above section header in debug mode
+- [x] Improve styling of concept expressions for better visibility
+- [x] Enhance debug mode UI for better usability
+
 ## Story 5h: Enhanced Test Path Graph Visualization
 - [ ] Make graph view the top-level visualization for test scenarios
 - [ ] Implement ability to define decision points and options

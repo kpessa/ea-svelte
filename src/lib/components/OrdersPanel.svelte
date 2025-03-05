@@ -1,8 +1,12 @@
 <script lang="ts">
-    import type { Tab } from '../types';
+    import type { Tab, OrderSection } from '../types';
     import { configStore } from '../services/configService';
     import { evaluateConceptExpression, evaluateConceptExpressionWithSteps, type EvaluationStep } from '../stores';
     import ConceptStatusIndicator from './ConceptStatusIndicator.svelte';
+    import { onMount } from 'svelte';
+    import { EditorView, basicSetup } from 'codemirror';
+    import { json } from '@codemirror/lang-json';
+    import { linter, lintGutter } from '@codemirror/lint';
 
     export let selectedTab: Tab;
     export let debugMode = false;
@@ -24,6 +28,29 @@
     let filteringEnabled = false;
     let filteredSections: Record<number, boolean> = {};
     let hiddenSectionCount = 0;
+    
+    // For inline section editing
+    let sectionIndexToEdit: number | null = null;
+    let editorContainer: HTMLElement | null = null;
+    let editorView: EditorView | null = null;
+    let editorContent: string = '';
+    let jsonError: string | null = null;
+
+    const jsonLinter = linter((view) => {
+        try {
+            JSON.parse(view.state.doc.toString());
+            jsonError = null;
+            return [];
+        } catch (e) {
+            jsonError = e instanceof Error ? e.message : 'Invalid JSON';
+            return [{
+                from: 0,
+                to: view.state.doc.length,
+                severity: 'error',
+                message: jsonError
+            }];
+        }
+    });
 
     function toggleSection(sectionIndex: number): void {
         collapsedSections[sectionIndex] = !collapsedSections[sectionIndex];
@@ -83,6 +110,93 @@
     $: if (selectedTab) {
         showAllSections();
     }
+    
+    // Open inline section editor
+    function editSection(sectionIndex: number) {
+        if (!currentTab) return;
+        
+        // Close any existing editor first
+        if (editorView) {
+            editorView.destroy();
+            editorView = null;
+        }
+        
+        // Set the section to edit
+        sectionIndexToEdit = sectionIndex;
+        
+        // We'll initialize the editor in the next render cycle
+        // after the editor container is available in the DOM
+        setTimeout(() => {
+            if (editorContainer && sectionIndexToEdit !== null) {
+                const section = orderSections[sectionIndexToEdit];
+                editorContent = JSON.stringify(section, null, 2);
+                
+                editorView = new EditorView({
+                    doc: editorContent,
+                    extensions: [
+                        basicSetup,
+                        json(),
+                        lintGutter(),
+                        jsonLinter,
+                        EditorView.theme({
+                            '&': {
+                                height: '300px',
+                                fontSize: '14px'
+                            },
+                            '.cm-content': {
+                                fontFamily: 'monospace'
+                            },
+                            '.cm-gutters': {
+                                backgroundColor: '#f5f5f5',
+                                borderRight: '1px solid #ddd'
+                            }
+                        })
+                    ],
+                    parent: editorContainer
+                });
+            }
+        }, 0);
+    }
+    
+    // Handle section update
+    function handleSectionUpdate() {
+        if (sectionIndexToEdit === null || !currentTab || !$configStore || !editorView) return;
+        
+        try {
+            const content = editorView.state.doc.toString();
+            const updatedSection = JSON.parse(content) as OrderSection;
+            
+            // Create a deep copy of the config
+            const updatedConfig = JSON.parse(JSON.stringify($configStore));
+            
+            // Find the tab index
+            const tabIndex = updatedConfig.RCONFIG.TABS.findIndex((tab: any) => tab.TAB_KEY === currentTab.TAB_KEY);
+            if (tabIndex === -1) return;
+            
+            // Update the section
+            updatedConfig.RCONFIG.TABS[tabIndex].ORDER_SECTIONS[sectionIndexToEdit] = updatedSection;
+            
+            // Update the store
+            configStore.set(updatedConfig);
+            
+            // Close the editor
+            closeSectionEditor();
+            
+            jsonError = null;
+        } catch (error) {
+            console.error('Failed to save section:', error);
+            jsonError = error instanceof Error ? error.message : 'Failed to save section';
+        }
+    }
+    
+    // Close section editor
+    function closeSectionEditor() {
+        if (editorView) {
+            editorView.destroy();
+            editorView = null;
+        }
+        sectionIndexToEdit = null;
+    }
 </script>
 
 <div class="clinical-orders-panel">
@@ -106,178 +220,176 @@
                 >
                     Show All Orders
                 </button>
-                <div class="filter-status">
-                    {hiddenSectionCount} section{hiddenSectionCount !== 1 ? 's' : ''} hidden
-                </div>
+                {#if hiddenSectionCount > 0}
+                    <span class="hidden-count">
+                        ({hiddenSectionCount} section{hiddenSectionCount !== 1 ? 's' : ''} hidden)
+                    </span>
+                {/if}
             {/if}
         </div>
     </div>
 
     {#if orderSections.length > 0}
         <div class="order-sections">
-            {#each orderSections as section, i}
-                {@const isConceptTrue = evaluateSectionExpression(section.CONCEPT_NAME)}
-                {#if shouldShowSection(section.CONCEPT_NAME, i)}
-                    {#if debugMode}
-                        <div class="debug-section">
-                            <div class="section-title">Debug: {section.SECTION_NAME}</div>
-                            <div class="section-content">
-                                <div class="debug-info">
-                                    <div class="debug-expression-item">
-                                        <span class="debug-label">Expression:</span>
-                                        <code>{section.CONCEPT_NAME}</code>
-                                        <button 
-                                            class="evaluate-btn"
-                                            on:click={() => openEvaluationModal(section.CONCEPT_NAME)}
-                                        >
-                                            Evaluate
-                                        </button>
-                                    </div>
-                                    <div class="debug-expression-item">
-                                        <span class="debug-label">Evaluation:</span>
-                                        {#if isConceptTrue}
-                                            <span class="concept-true">True</span>
-                                        {:else}
-                                            <span class="concept-false">False</span>
-                                        {/if}
-                                    </div>
-                                    <div class="debug-expression-item">
-                                        <span class="debug-label">Orders:</span>
-                                        <span>{section.ORDERS?.length || 0}</span>
-                                    </div>
-                                    <div class="debug-expression-item">
-                                        <span class="debug-label">Single Select:</span>
-                                        <span>{section.SINGLE_SELECT === 1 ? 'Yes' : 'No'}</span>
-                                    </div>
-                                </div>
+            {#each orderSections as section, sectionIndex}
+                {#if shouldShowSection(section.CONCEPT_NAME, sectionIndex)}
+                    <div class="order-section" class:collapsed={collapsedSections[sectionIndex]}>
+                        {#if debugMode}
+                            <div class="concept-expression">
+                                <span class="expression-text">{section.CONCEPT_NAME}</span>
+                                <button 
+                                    class="evaluate-btn"
+                                    on:click={() => openEvaluationModal(section.CONCEPT_NAME)}
+                                    title="Evaluate expression"
+                                >
+                                    🔍
+                                </button>
                             </div>
-                        </div>
-                    {/if}
-                    <div class="order-section {isConceptTrue ? '' : 'concept-false-section'}">
+                        {/if}
                         <div class="section-header">
-                            <div class="section-title-row">
-                                <div class="section-title">
-                                    {@html section.SECTION_NAME}
-                                    {#if debugMode || filteringEnabled}
-                                        <span class="concept-indicator {isConceptTrue ? 'true' : 'false'}" 
-                                              title="Concept expression evaluates to {isConceptTrue ? 'true' : 'false'}">
-                                            {isConceptTrue ? '✓' : '✗'}
-                                        </span>
-                                    {/if}
-                                </div>
-                                <div class="section-controls">
-                                    <button class="edit-button">Edit</button>
-                                    <button class="collapse-button" on:click={() => toggleSection(i)}>
-                                        {collapsedSections[i] ? '▼' : '▲'}
-                                    </button>
-                                </div>
+                            <div class="section-controls">
+                                <button 
+                                    class="toggle-btn" 
+                                    on:click={() => toggleSection(sectionIndex)}
+                                    title={collapsedSections[sectionIndex] ? "Expand section" : "Collapse section"}
+                                >
+                                    {collapsedSections[sectionIndex] ? '▶' : '▼'}
+                                </button>
+                                <button 
+                                    class="edit-btn" 
+                                    on:click={() => editSection(sectionIndex)}
+                                    title="Edit section"
+                                >
+                                    ✏️
+                                </button>
+                            </div>
+                            <div class="section-title">
+                                {@html section.SECTION_NAME}
                             </div>
                         </div>
                         
-                        {#if !collapsedSections[i]}
+                        {#if !collapsedSections[sectionIndex]}
                             <div class="section-content">
                                 {#if section.ORDERS && section.ORDERS.length > 0}
                                     <div class="orders-list">
                                         {#each section.ORDERS as order}
                                             <div class="order-item">
                                                 <div class="order-checkbox">
-                                                    {#if section.SINGLE_SELECT === 1}
-                                                        <input type="radio" name={`section-${i}`} class="radio-input" />
-                                                    {:else}
-                                                        <input type="checkbox" class="checkbox-input" />
-                                                    {/if}
+                                                    <input 
+                                                        type="checkbox" 
+                                                        id={`order-${sectionIndex}-${order.MNEMONIC}`}
+                                                        disabled={section.SINGLE_SELECT === 1}
+                                                    />
+                                                    <label for={`order-${sectionIndex}-${order.MNEMONIC}`}>
+                                                        {order.ORDER_SENTENCE || order.MNEMONIC}
+                                                    </label>
                                                 </div>
-                                                <div class="order-details">
-                                                    <div class="order-name">{order.MNEMONIC}</div>
-                                                    <div class="order-sentence">{order.ORDER_SENTENCE}</div>
-                                                    {#if order.COMMENT}
-                                                        <div class="order-comment">
-                                                            {@html order.COMMENT}
-                                                        </div>
-                                                    {/if}
-                                                </div>
+                                                {#if order.ASC_SHORT_DESCRIPTION || order.COMMENT}
+                                                    <div class="order-details">
+                                                        {#if order.ASC_SHORT_DESCRIPTION}
+                                                            <div class="order-description">
+                                                                {order.ASC_SHORT_DESCRIPTION}
+                                                            </div>
+                                                        {/if}
+                                                        {#if order.COMMENT}
+                                                            <div class="order-comment">
+                                                                {order.COMMENT}
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                {/if}
                                             </div>
                                         {/each}
                                     </div>
                                 {:else}
                                     <div class="no-orders">
-                                        No orders in this section
+                                        No orders available in this section
                                     </div>
                                 {/if}
+                            </div>
+                        {/if}
+                        
+                        <!-- Inline editor for this section -->
+                        {#if sectionIndexToEdit === sectionIndex}
+                            <div class="inline-editor-container">
+                                <div class="inline-editor-header">
+                                    <h3>Editing: {section.SECTION_NAME}</h3>
+                                </div>
+                                
+                                {#if jsonError}
+                                    <div class="json-error">
+                                        {jsonError}
+                                    </div>
+                                {/if}
+                                
+                                <div class="editor-wrapper" bind:this={editorContainer}></div>
+                                
+                                <div class="inline-editor-actions">
+                                    <button 
+                                        class="cancel-btn" 
+                                        on:click={closeSectionEditor}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        class="save-btn" 
+                                        on:click={handleSectionUpdate}
+                                    >
+                                        Save
+                                    </button>
+                                </div>
                             </div>
                         {/if}
                     </div>
                 {/if}
             {/each}
         </div>
-        
-        {#if filteringEnabled && hiddenSectionCount > 0}
-            <div class="hidden-sections-info">
-                {hiddenSectionCount} section{hiddenSectionCount !== 1 ? 's' : ''} hidden based on concept evaluation.
-                <button class="show-all-link" on:click={showAllSections}>
-                    Show all sections
-                </button>
-            </div>
-        {/if}
     {:else}
-        <div class="no-orders-available">
-            No orders available
+        <div class="no-sections">
+            No order sections available
         </div>
     {/if}
 </div>
 
 {#if showEvaluationModal}
-    <div class="evaluation-modal-overlay">
-        <div class="evaluation-modal">
+    <div class="evaluation-modal">
+        <div class="evaluation-modal-content">
             <div class="evaluation-modal-header">
                 <h3>Expression Evaluation</h3>
                 <button class="close-btn" on:click={closeEvaluationModal}>×</button>
             </div>
             <div class="evaluation-modal-body">
-                <div class="expression-container">
-                    <h4>Expression:</h4>
-                    <code class="expression-code">{currentExpression}</code>
+                <div class="original-expression">
+                    <strong>Original Expression:</strong> {currentExpression}
                 </div>
-                
-                {#if evaluationResult !== null}
-                    <div class="evaluation-result">
-                        <span class="result-label">Result:</span>
-                        <span class="result-value {evaluationResult ? 'true' : 'false'}">
-                            {evaluationResult ? 'True' : 'False'}
-                        </span>
-                    </div>
-                {/if}
-                
-                {#if evaluationSteps.length > 0}
-                    <div class="evaluation-steps">
-                        <h4>Step-by-Step Evaluation</h4>
-                        <div class="steps-container">
-                            {#each evaluationSteps as step, index}
-                                <div class="evaluation-step {step.isSubExpression ? 'sub-expression' : ''}">
-                                    <div class="step-number">{index + 1}</div>
-                                    <div class="step-content">
-                                        <div class="step-explanation">{step.explanation}</div>
-                                        <div class="step-expression">
-                                            {#if step.isSubExpression}
-                                                <span class="concept-name">{step.conceptName}</span>: 
-                                                <span class="concept-value {step.result ? 'true' : 'false'}">
-                                                    {step.result ? 'True' : 'False'}
-                                                </span>
-                                            {:else}
-                                                <code>{step.expression}</code>
-                                                {#if step.result !== null}
-                                                    <span class="result-indicator {step.result ? 'true' : 'false'}">
-                                                        {step.result ? 'True' : 'False'}
-                                                    </span>
-                                                {/if}
-                                            {/if}
+                <div class="evaluation-result">
+                    <strong>Result:</strong> <span class={evaluationResult ? 'true-result' : 'false-result'}>
+                        {evaluationResult ? 'TRUE' : 'FALSE'}
+                    </span>
+                </div>
+                <div class="evaluation-steps">
+                    <h4>Evaluation Steps:</h4>
+                    <div class="steps-list">
+                        {#each evaluationSteps as step, index}
+                            <div class="step-item" class:sub-expression={step.isSubExpression}>
+                                <div class="step-number">{index + 1}.</div>
+                                <div class="step-content">
+                                    <div class="step-expression">
+                                        {step.expression}
+                                    </div>
+                                    {#if step.result !== null}
+                                        <div class="step-result" class:true-result={step.result} class:false-result={!step.result}>
+                                            = {step.result ? 'TRUE' : 'FALSE'}
                                         </div>
+                                    {/if}
+                                    <div class="step-explanation">
+                                        {step.explanation}
                                     </div>
                                 </div>
-                            {/each}
-                        </div>
+                            </div>
+                        {/each}
                     </div>
-                {/if}
+                </div>
             </div>
         </div>
     </div>
@@ -287,6 +399,10 @@
     .clinical-orders-panel {
         font-family: Arial, sans-serif;
         color: #333;
+        height: 100%;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
     }
     
     .orders-panel-header {
@@ -296,7 +412,7 @@
         padding: 10px;
         background-color: #f8f9fa;
         border-bottom: 1px solid #e9ecef;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
     }
     
     .concept-status {
@@ -307,17 +423,20 @@
     .filter-controls {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
     }
     
     .filter-btn {
-        padding: 6px 12px;
+        padding: 4px 8px;
+        font-size: 12px;
+        border: 1px solid #ccc;
+        background-color: #f0f0f0;
         border-radius: 4px;
-        font-size: 14px;
-        font-weight: 500;
         cursor: pointer;
-        border: 1px solid transparent;
-        transition: all 0.2s;
+    }
+    
+    .filter-btn:hover {
+        background-color: #e0e0e0;
     }
     
     .evaluate-sections-btn {
@@ -399,127 +518,136 @@
         margin-bottom: 10px;
     }
 
-    .section-title {
-        font-weight: bold;
-        padding: 5px;
-        display: flex;
-        align-items: center;
-    }
-
-    .ordered-by-section .section-title, .debug-section .section-title {
-        background-color: #f0f0f0;
-        border-bottom: 1px solid #ccc;
-    }
-
-    .debug-section .section-title {
-        background-color: #e6f7ff;
-        color: #0056b3;
-    }
-
-    .ordered-by-section .section-content, .debug-section .section-content {
-        padding: 5px;
-    }
-
-    .debug-info {
-        font-size: 12px;
-        font-family: Arial, sans-serif;
-    }
-
-    .debug-expression-item {
-        margin-bottom: 5px;
-        display: flex;
-        align-items: center;
-    }
-
-    .debug-label {
-        font-weight: bold;
-        margin-right: 5px;
-        min-width: 100px;
-    }
-
-    code {
-        font-family: monospace;
-        background-color: #f5f5f5;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-size: 11px;
-    }
-
-    .order-section {
-        border: 1px solid #ccc;
-        margin-bottom: 20px;
-        transition: opacity 0.3s, transform 0.3s;
-    }
-
     .section-header {
-        background-color: #f0f0f0;
-        border-bottom: 1px solid #ccc;
-    }
-
-    .section-title-row {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 5px;
+        align-items: flex-start;
+        padding: 8px 12px;
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ddd;
     }
 
     .section-controls {
         display: flex;
-        gap: 5px;
+        gap: 4px;
+        margin-right: 8px;
+        flex: 0 0 auto;
+        padding-top: 2px;
     }
 
-    .edit-button, .collapse-button {
-        background-color: #f0f0f0;
-        border: 1px solid #ccc;
-        padding: 2px 5px;
-        font-size: 12px;
+    .section-title {
+        flex-grow: 1;
+        font-weight: bold;
+        font-size: 14px;
+        color: #333;
+        display: block;
+        padding: 0;
+        line-height: 1.4;
+    }
+    
+    .concept-expression {
+        font-size: 11px;
+        color: #666;
+        background-color: #f8f8f8;
+        padding: 4px 8px;
+        border-radius: 2px 2px 0 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border-bottom: 1px dashed #ddd;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .expression-text {
+        font-family: monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+    }
+    
+    .toggle-btn, .edit-btn {
+        background: none;
+        border: none;
         cursor: pointer;
+        font-size: 14px;
+        padding: 2px 4px;
+        color: #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-
-    .edit-button:hover, .collapse-button:hover {
-        background-color: #e0e0e0;
+    
+    .toggle-btn:hover, .edit-btn:hover {
+        color: #333;
+        background-color: rgba(0, 0, 0, 0.05);
+        border-radius: 3px;
     }
 
     .section-content {
-        padding: 5px;
+        padding: 10px;
     }
 
     .orders-list {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 8px;
     }
 
     .order-item {
-        display: flex;
-        padding: 5px;
+        display: block;
+        padding: 8px;
         border-bottom: 1px solid #eee;
     }
 
-    .order-checkbox {
-        margin-right: 10px;
-        display: flex;
-        align-items: flex-start;
-        padding-top: 3px;
+    /* Style for blue highlighted text that appears in some order items */
+    .order-item div[style*="background-color: rgb(230, 247, 255)"],
+    .order-item div[style*="background-color:#e6f7ff"] {
+        display: block;
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        border-radius: 4px;
+        border: 1px dashed #91d5ff;
+        line-height: 1.5;
+        white-space: normal;
+        word-break: break-word;
     }
 
-    .checkbox-input, .radio-input {
-        width: 16px;
-        height: 16px;
+    .order-checkbox {
+        display: flex;
+        align-items: flex-start;
+        margin-right: 0;
+        width: 100%;
+    }
+
+    .order-checkbox input[type="checkbox"] {
+        margin-top: 2px;
+        margin-right: 8px;
+        flex-shrink: 0;
+    }
+
+    .order-checkbox label {
+        font-weight: bold;
+        cursor: pointer;
+        flex: 1;
+        word-break: break-word;
+        white-space: normal;
     }
 
     .order-details {
-        flex: 1;
+        flex: 1 1 100%;
+        margin-left: 28px; /* Align with the text of the checkbox label */
+        margin-top: 5px;
     }
 
-    .order-name {
-        font-weight: bold;
-        margin-bottom: 3px;
-    }
-
-    .order-sentence {
+    .order-description {
         font-size: 13px;
-        margin-bottom: 3px;
+        color: #333;
+        margin-top: 4px;
+        display: block;
+        width: 100%;
     }
 
     .order-comment {
@@ -529,6 +657,8 @@
         padding: 5px;
         background-color: #f9f9f9;
         border-left: 3px solid #ddd;
+        display: block;
+        width: 100%;
     }
 
     .concept-true {
@@ -761,5 +891,361 @@
     .result-indicator.false {
         background-color: #ffebee;
         color: #c62828;
+    }
+    
+    .section-controls {
+        display: flex;
+        gap: 4px;
+        margin-right: 8px;
+    }
+    
+    .toggle-btn, .edit-btn, .evaluate-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 2px;
+        color: #666;
+    }
+    
+    .toggle-btn:hover, .edit-btn:hover, .evaluate-btn:hover {
+        color: #333;
+    }
+    
+    .section-header {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .expression-text {
+        font-family: monospace;
+    }
+    
+    .evaluation-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+    
+    .evaluation-modal-content {
+        background-color: white;
+        border-radius: 4px;
+        width: 80%;
+        max-width: 800px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .evaluation-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e5e5;
+    }
+    
+    .evaluation-modal-header h3 {
+        margin: 0;
+        font-size: 18px;
+    }
+    
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        color: #666;
+    }
+    
+    .close-btn:hover {
+        color: #333;
+    }
+    
+    .evaluation-modal-body {
+        padding: 16px;
+        overflow-y: auto;
+    }
+    
+    .original-expression {
+        margin-bottom: 12px;
+        padding: 8px;
+        background-color: #f8f8f8;
+        border-radius: 4px;
+        font-family: monospace;
+    }
+    
+    .evaluation-result {
+        margin-bottom: 16px;
+        padding: 8px;
+        background-color: #f0f0f0;
+        border-radius: 4px;
+    }
+    
+    .true-result {
+        color: #22c55e;
+        font-weight: bold;
+    }
+    
+    .false-result {
+        color: #ef4444;
+        font-weight: bold;
+    }
+    
+    .evaluation-steps h4 {
+        margin-top: 0;
+        margin-bottom: 8px;
+    }
+    
+    .steps-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .step-item {
+        display: flex;
+        padding: 8px;
+        background-color: #f8f8f8;
+        border-radius: 4px;
+    }
+    
+    .sub-expression {
+        margin-left: 24px;
+        background-color: #edf2f7;
+        border-left: 3px solid #cbd5e0;
+    }
+    
+    .step-number {
+        margin-right: 8px;
+        font-weight: bold;
+        color: #666;
+    }
+    
+    .step-content {
+        flex-grow: 1;
+    }
+    
+    .step-expression {
+        font-family: monospace;
+        margin-bottom: 4px;
+    }
+    
+    .step-result {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+    
+    .step-explanation {
+        color: #666;
+        font-size: 12px;
+    }
+    
+    .filter-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .filter-btn:hover {
+        background-color: #e0e0e0;
+    }
+    
+    .evaluate-sections-btn {
+        background-color: #3b82f6;
+        color: white;
+        border-color: #2563eb;
+    }
+    
+    .evaluate-sections-btn:hover {
+        background-color: #2563eb;
+    }
+    
+    .show-all-btn {
+        background-color: #6b7280;
+        color: white;
+        border-color: #4b5563;
+    }
+    
+    .show-all-btn:hover {
+        background-color: #4b5563;
+    }
+    
+    .hidden-count {
+        font-size: 12px;
+        color: #666;
+    }
+    
+    .orders-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background-color: #f8f8f8;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    /* Inline editor styles */
+    .inline-editor-container {
+        border-top: 1px solid #ddd;
+        background-color: #f8f8f8;
+        padding: 15px;
+        margin-top: 0;
+    }
+    
+    .inline-editor-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    
+    .inline-editor-header h3 {
+        margin: 0;
+        font-size: 16px;
+        color: #333;
+    }
+    
+    .editor-wrapper {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: white;
+        height: 300px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    .inline-editor-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    
+    .save-btn, .cancel-btn {
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background-color 0.2s;
+    }
+    
+    .save-btn {
+        background-color: #4caf50;
+        color: white;
+    }
+    
+    .save-btn:hover {
+        background-color: #45a049;
+    }
+    
+    .cancel-btn {
+        background-color: #f44336;
+        color: white;
+    }
+    
+    .cancel-btn:hover {
+        background-color: #d32f2f;
+    }
+    
+    .json-error {
+        padding: 10px;
+        margin-bottom: 12px;
+        background-color: #ffebee;
+        color: #c62828;
+        border-radius: 4px;
+        font-size: 14px;
+        border-left: 4px solid #ef5350;
+    }
+    
+    /* Make sure the editor is visible */
+    :global(.cm-editor) {
+        height: 100%;
+    }
+    
+    :global(.cm-scroller) {
+        overflow: auto;
+    }
+
+    .order-sections {
+        padding: 0 5px;
+        overflow: auto;
+        flex: 1;
+    }
+
+    /* Add styles to properly handle HTML content in section titles */
+    .section-title :global(br) {
+        display: block;
+        content: "";
+        margin-top: 5px;
+    }
+    
+    .section-title :global(p) {
+        display: block;
+        margin: 5px 0;
+    }
+    
+    .section-title :global(p[style*="text-indent"]) {
+        display: block;
+        margin-top: 5px;
+    }
+    
+    .section-title :global(p:first-child) {
+        margin-top: 0;
+    }
+    
+    .section-title :global(p:last-child) {
+        margin-bottom: 0;
+    }
+    
+    .debug-info {
+        font-size: 12px;
+        font-family: Arial, sans-serif;
+    }
+    
+    .debug-expression-item {
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .debug-label {
+        font-weight: bold;
+        margin-right: 5px;
+        min-width: 100px;
+    }
+    
+    code {
+        font-family: monospace;
+        background-color: #f5f5f5;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 11px;
+    }
+    
+    .order-section {
+        border: 1px solid #ddd;
+        margin-bottom: 15px;
+        border-radius: 4px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        background-color: white;
+    }
+    
+    .order-section.collapsed {
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
     }
 </style> 
