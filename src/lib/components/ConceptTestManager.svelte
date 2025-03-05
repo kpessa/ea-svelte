@@ -184,6 +184,23 @@
     }
   }
   
+  function handleDeleteSubScenario(event: CustomEvent) {
+    const subScenarioId = event.detail.scenarioId;
+    
+    if (selectedScenarioId && subScenarioId) {
+      if (confirm('Are you sure you want to delete this sub-scenario? This action cannot be undone.')) {
+        if (ConceptTestService.deleteSubScenario(selectedScenarioId, subScenarioId)) {
+          if (selectedSubScenarioId === subScenarioId) {
+            selectedSubScenarioId = null;
+          }
+          loadScenarios();
+        } else {
+          alert('Failed to delete sub-scenario.');
+        }
+      }
+    }
+  }
+  
   function addExpectedResult() {
     if (selectedScenarioId && selectedSubScenarioId && newExpectedResultTarget.trim()) {
       const expectedResult: ExpectedResult = {
@@ -326,6 +343,29 @@
     const magnesiumScenario = ConceptTestService.createDefaultMagnesiumScenario();
     selectedScenarioId = magnesiumScenario.id;
     alert('Magnesium scenario created successfully!');
+  }
+  
+  function deleteScenario() {
+    if (selectedScenarioId && confirm('Are you sure you want to delete this scenario? This action cannot be undone.')) {
+      if (ConceptTestService.deleteScenario(selectedScenarioId)) {
+        selectedScenarioId = null;
+        selectedSubScenarioId = null;
+        loadScenarios();
+      } else {
+        alert('Failed to delete scenario.');
+      }
+    }
+  }
+  
+  function deleteSubScenario() {
+    if (selectedScenarioId && selectedSubScenarioId && confirm('Are you sure you want to delete this sub-scenario? This action cannot be undone.')) {
+      if (ConceptTestService.deleteSubScenario(selectedScenarioId, selectedSubScenarioId)) {
+        selectedSubScenarioId = null;
+        loadScenarios();
+      } else {
+        alert('Failed to delete sub-scenario.');
+      }
+    }
   }
   
   function setMagnesiumConcepts() {
@@ -471,6 +511,11 @@
       </button>
       <button class="action-btn" on:click={createMagnesiumScenario}>Create Default Scenario</button>
       <button class="action-btn" on:click={setConceptsDirectly}>Set All Concepts</button>
+      {#if selectedScenarioId}
+        <button class="action-btn delete-btn" on:click={deleteScenario}>
+          Delete Scenario
+        </button>
+      {/if}
     </div>
   </div>
   
@@ -621,6 +666,7 @@
             on:addSubScenario={handleAddSubScenario}
             on:editConcepts={handleEditConcepts}
             on:addExpectedResult={handleAddExpectedResult}
+            on:deleteSubScenario={handleDeleteSubScenario}
           />
         </div>
       {/if}
@@ -659,6 +705,9 @@
               </button>
               <button class="action-btn" on:click={executeTest}>
                 Execute Test
+              </button>
+              <button class="action-btn delete-btn" on:click={deleteSubScenario}>
+                Delete Sub-Scenario
               </button>
             </div>
           </div>
@@ -1190,5 +1239,16 @@
     display: flex;
     justify-content: flex-end;
     border-top: 1px solid #e0e0e0;
+  }
+  
+  .delete-btn {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+  }
+  
+  .delete-btn:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
   }
 </style> 

@@ -506,4 +506,76 @@ export class ConceptTestService {
     
     return scenario;
   }
+  
+  /**
+   * Delete a test scenario by ID
+   * @param scenarioId The ID of the scenario to delete
+   * @returns boolean indicating if the deletion was successful
+   */
+  static deleteScenario(scenarioId: string): boolean {
+    let success = false;
+    
+    testScenarios.update(scenarios => {
+      const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
+      if (scenarioIndex === -1) return scenarios;
+      
+      // Create a new array without the deleted scenario
+      const updatedScenarios = scenarios.filter(s => s.id !== scenarioId);
+      success = true;
+      
+      return updatedScenarios;
+    });
+    
+    return success;
+  }
+  
+  /**
+   * Delete a sub-scenario by ID
+   * @param scenarioId The ID of the parent scenario
+   * @param subScenarioId The ID of the sub-scenario to delete
+   * @returns boolean indicating if the deletion was successful
+   */
+  static deleteSubScenario(scenarioId: string, subScenarioId: string): boolean {
+    let success = false;
+    
+    testScenarios.update(scenarios => {
+      const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
+      if (scenarioIndex === -1) return scenarios;
+      
+      // Create a deep copy of the scenarios array
+      const updatedScenarios = [...scenarios];
+      
+      // Helper function to find and remove the sub-scenario
+      const removeSubScenario = (subScenarios: TestSubScenario[]): boolean => {
+        for (let i = 0; i < subScenarios.length; i++) {
+          if (subScenarios[i].id === subScenarioId) {
+            // Found the sub-scenario, remove it
+            subScenarios.splice(i, 1);
+            return true;
+          }
+          
+          // Recursively check children
+          if (subScenarios[i].children.length > 0) {
+            if (removeSubScenario(subScenarios[i].children)) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      };
+      
+      // Try to remove the sub-scenario
+      success = removeSubScenario(updatedScenarios[scenarioIndex].scenarios);
+      
+      // Update the timestamp if successful
+      if (success) {
+        updatedScenarios[scenarioIndex].updatedAt = new Date().toISOString();
+      }
+      
+      return updatedScenarios;
+    });
+    
+    return success;
+  }
 } 

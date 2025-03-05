@@ -93,6 +93,11 @@
   function editConcepts(scenarioId: string) {
     dispatch('editConcepts', { scenarioId });
   }
+
+  // Delete a sub-scenario
+  function deleteSubScenario(scenarioId: string) {
+    dispatch('deleteSubScenario', { scenarioId });
+  }
 </script>
 
 <div class="hierarchical-scenario-manager">
@@ -124,6 +129,9 @@
                 </button>
                 <button class="action-btn" on:click|stopPropagation={() => addSubScenario(subScenario.id)}>
                   <span class="btn-icon">+</span> Add Sub-Scenario
+                </button>
+                <button class="action-btn delete-btn" on:click|stopPropagation={() => deleteSubScenario(subScenario.id)}>
+                  <span class="btn-icon">🗑️</span> Delete
                 </button>
               </div>
             {/if}
@@ -213,6 +221,9 @@
                         </button>
                         <button class="action-btn" on:click|stopPropagation={() => addSubScenario(childScenario.id)}>
                           <span class="btn-icon">+</span> Add Sub-Scenario
+                        </button>
+                        <button class="action-btn delete-btn" on:click|stopPropagation={() => deleteSubScenario(childScenario.id)}>
+                          <span class="btn-icon">🗑️</span> Delete
                         </button>
                       </div>
                     {/if}
@@ -593,5 +604,16 @@
     margin-left: 1rem;
     border-left: 2px solid #e0e0e0;
     padding-left: 0.5rem;
+  }
+  
+  .delete-btn {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+  }
+  
+  .delete-btn:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
   }
 </style> 
