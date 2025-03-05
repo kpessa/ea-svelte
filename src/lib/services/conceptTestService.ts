@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store';
 import type { 
   TestScenario, 
+  TestSubScenario,
   TestPath, 
   TestStep, 
   TestResult, 
@@ -38,7 +39,7 @@ export class ConceptTestService {
       id: uuidv4(),
       name,
       description,
-      paths: [],
+      scenarios: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -93,109 +94,73 @@ export class ConceptTestService {
   }
   
   /**
-   * Add a new path to a test scenario
-   * @param scenarioId The ID of the scenario to add the path to
-   * @param name The name of the path
-   * @param description The description of the path
-   * @param parentId Optional parent path ID for hierarchical paths
-   * @returns The newly created path, or null if the scenario was not found
+   * Add a new sub-scenario to a test scenario
+   * @param scenarioId The ID of the scenario to add the sub-scenario to
+   * @param name The name of the sub-scenario
+   * @param description The description of the sub-scenario
+   * @param parentId Optional parent sub-scenario ID for hierarchical structure
+   * @returns The newly created sub-scenario, or null if the scenario was not found
    */
-  static addPathToScenario(scenarioId: string, name: string, description: string, parentId: string | null = null): TestPath | null {
-    let addedPath: TestPath | null = null;
+  static addSubScenarioToScenario(
+    scenarioId: string, 
+    name: string, 
+    description: string, 
+    parentId: string | null = null
+  ): TestSubScenario | null {
+    let addedSubScenario: TestSubScenario | null = null;
     
     testScenarios.update(scenarios => {
       const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
       if (scenarioIndex === -1) return scenarios;
       
-      const newPath: TestPath = {
+      const newSubScenario: TestSubScenario = {
         id: uuidv4(),
         name,
         description,
-        steps: [],
-        expectedResults: [],
-        parentId
+        parentId,
+        level: 0, // Will be calculated when added to the tree
+        concepts: [],
+        children: [],
+        expectedResults: []
       };
       
-      addedPath = newPath;
-      
-      // Update the scenario with the new path
-      const updatedScenario = {
-        ...scenarios[scenarioIndex],
-        paths: [...scenarios[scenarioIndex].paths, newPath],
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Replace the scenario in the array
-      const updatedScenarios = [...scenarios];
-      updatedScenarios[scenarioIndex] = updatedScenario;
-      
-      return updatedScenarios;
-    });
-    
-    return addedPath;
-  }
-  
-  /**
-   * Add a step to a test path
-   */
-  static addStepToPath(
-    scenarioId: string, 
-    pathId: string, 
-    name: string, 
-    conceptChanges: ConceptChange[],
-    useDefaultValues: boolean = true
-  ): TestStep | null {
-    let addedStep: TestStep | null = null;
-    
-    // If useDefaultValues is true, apply default values to any concepts not explicitly set
-    if (useDefaultValues) {
-      const defaults = get(defaultConceptValues);
-      const allConcepts = Object.keys(get(concepts));
-      const changedConceptNames = conceptChanges.map(c => c.conceptName);
-      
-      // For each concept that's not explicitly changed, add it with default values if available
-      allConcepts.forEach(conceptName => {
-        if (!changedConceptNames.includes(conceptName) && defaults[conceptName]) {
-          conceptChanges.push({
-            conceptName,
-            value: defaults[conceptName].value,
-            isActive: defaults[conceptName].isActive
-          });
-        }
-      });
-    }
-    
-    testScenarios.update(scenarios => {
-      const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
-      if (scenarioIndex === -1) return scenarios;
-      
-      const pathIndex = scenarios[scenarioIndex].paths.findIndex(p => p.id === pathId);
-      if (pathIndex === -1) return scenarios;
-      
-      const newStep: TestStep = {
-        id: uuidv4(),
-        name,
-        conceptChanges,
-        order: scenarios[scenarioIndex].paths[pathIndex].steps.length
-      };
-      
-      addedStep = newStep;
+      addedSubScenario = newSubScenario;
       
       // Create a deep copy of the scenarios array
       const updatedScenarios = [...scenarios];
       
-      // Update the path with the new step
-      const updatedPath = {
-        ...updatedScenarios[scenarioIndex].paths[pathIndex],
-        steps: [...updatedScenarios[scenarioIndex].paths[pathIndex].steps, newStep]
-      };
-      
-      // Update the paths array
-      updatedScenarios[scenarioIndex].paths = [
-        ...updatedScenarios[scenarioIndex].paths.slice(0, pathIndex),
-        updatedPath,
-        ...updatedScenarios[scenarioIndex].paths.slice(pathIndex + 1)
-      ];
+      if (parentId) {
+        // This is a child scenario, add it to its parent
+        const addToParent = (subScenarios: TestSubScenario[]): boolean => {
+          for (let i = 0; i < subScenarios.length; i++) {
+            if (subScenarios[i].id === parentId) {
+              // Found the parent, add the new sub-scenario as a child
+              newSubScenario.level = subScenarios[i].level + 1;
+              subScenarios[i].children.push(newSubScenario);
+              return true;
+            }
+            
+            // Recursively check children
+            if (subScenarios[i].children.length > 0) {
+              if (addToParent(subScenarios[i].children)) {
+                return true;
+              }
+            }
+          }
+          
+          return false;
+        };
+        
+        // Try to add to parent
+        if (!addToParent(updatedScenarios[scenarioIndex].scenarios)) {
+          // Parent not found, add as a root scenario
+          newSubScenario.parentId = null;
+          updatedScenarios[scenarioIndex].scenarios.push(newSubScenario);
+        }
+      } else {
+        // This is a root scenario
+        updatedScenarios[scenarioIndex].scenarios.push(newSubScenario);
+      }
       
       // Update the timestamp
       updatedScenarios[scenarioIndex].updatedAt = new Date().toISOString();
@@ -203,45 +168,54 @@ export class ConceptTestService {
       return updatedScenarios;
     });
     
-    return addedStep;
+    return addedSubScenario;
   }
   
   /**
-   * Add an expected result to a path
+   * Update concepts for a sub-scenario
    */
-  static addExpectedResultToPath(scenarioId: string, pathId: string, expectedResult: ExpectedResult): boolean {
+  static updateSubScenarioConcepts(
+    scenarioId: string,
+    subScenarioId: string,
+    concepts: ConceptChange[]
+  ): boolean {
     let success = false;
     
     testScenarios.update(scenarios => {
       const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
       if (scenarioIndex === -1) return scenarios;
       
-      const pathIndex = scenarios[scenarioIndex].paths.findIndex(p => p.id === pathId);
-      if (pathIndex === -1) return scenarios;
-      
       // Create a deep copy of the scenarios array
       const updatedScenarios = [...scenarios];
       
-      // Update the path with the new expected result
-      const updatedPath = {
-        ...updatedScenarios[scenarioIndex].paths[pathIndex],
-        expectedResults: [
-          ...updatedScenarios[scenarioIndex].paths[pathIndex].expectedResults,
-          expectedResult
-        ]
+      // Helper function to find and update the sub-scenario
+      const updateConcepts = (subScenarios: TestSubScenario[]): boolean => {
+        for (let i = 0; i < subScenarios.length; i++) {
+          if (subScenarios[i].id === subScenarioId) {
+            // Found the sub-scenario, update its concepts
+            subScenarios[i].concepts = concepts;
+            return true;
+          }
+          
+          // Recursively check children
+          if (subScenarios[i].children.length > 0) {
+            if (updateConcepts(subScenarios[i].children)) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
       };
       
-      // Update the paths array
-      updatedScenarios[scenarioIndex].paths = [
-        ...updatedScenarios[scenarioIndex].paths.slice(0, pathIndex),
-        updatedPath,
-        ...updatedScenarios[scenarioIndex].paths.slice(pathIndex + 1)
-      ];
+      // Try to update the sub-scenario
+      success = updateConcepts(updatedScenarios[scenarioIndex].scenarios);
       
-      // Update the timestamp
-      updatedScenarios[scenarioIndex].updatedAt = new Date().toISOString();
+      // Update the timestamp if successful
+      if (success) {
+        updatedScenarios[scenarioIndex].updatedAt = new Date().toISOString();
+      }
       
-      success = true;
       return updatedScenarios;
     });
     
@@ -249,325 +223,203 @@ export class ConceptTestService {
   }
   
   /**
-   * Execute a test path
+   * Add an expected result to a sub-scenario
    */
-  static async executeTestPath(scenarioId: string, pathId: string): Promise<TestResult> {
-    const scenarios = get(testScenarios);
-    const scenario = scenarios.find(s => s.id === scenarioId);
-    if (!scenario) {
-      throw new Error(`Scenario with ID ${scenarioId} not found`);
-    }
+  static addExpectedResultToSubScenario(
+    scenarioId: string,
+    subScenarioId: string,
+    expectedResult: ExpectedResult
+  ): boolean {
+    let success = false;
     
-    const path = scenario.paths.find(p => p.id === pathId);
-    if (!path) {
-      throw new Error(`Path with ID ${pathId} not found in scenario ${scenarioId}`);
-    }
-    
-    // Save the original concept states to restore later
-    const originalConcepts = get(concepts);
-    
-    // Initialize test result
-    const testResult: TestResult = {
-      scenarioId,
-      pathId,
-      timestamp: new Date().toISOString(),
-      steps: [],
-      success: true
-    };
-    
-    try {
-      // Execute each step in the path
-      for (const step of path.steps) {
-        // Apply concept changes for this step
-        this.applyConceptChanges(step.conceptChanges);
-        
-        // Evaluate expected results
-        const stepResult = this.evaluateExpectedResults(path.expectedResults);
-        
-        // Add step result to test result
-        testResult.steps.push({
-          stepId: step.id,
-          conceptStates: { ...get(concepts) },
-          results: stepResult.results,
-          success: stepResult.success
-        });
-        
-        // If any step fails, mark the test as failed
-        if (!stepResult.success) {
-          testResult.success = false;
-          testResult.failureReason = `Step "${step.name}" failed: ${stepResult.failureReason}`;
+    testScenarios.update(scenarios => {
+      const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
+      if (scenarioIndex === -1) return scenarios;
+      
+      // Create a deep copy of the scenarios array
+      const updatedScenarios = [...scenarios];
+      
+      // Helper function to find and update the sub-scenario
+      const addExpectedResult = (subScenarios: TestSubScenario[]): boolean => {
+        for (let i = 0; i < subScenarios.length; i++) {
+          if (subScenarios[i].id === subScenarioId) {
+            // Found the sub-scenario, add the expected result
+            subScenarios[i].expectedResults.push(expectedResult);
+            return true;
+          }
+          
+          // Recursively check children
+          if (subScenarios[i].children.length > 0) {
+            if (addExpectedResult(subScenarios[i].children)) {
+              return true;
+            }
+          }
         }
+        
+        return false;
+      };
+      
+      // Try to update the sub-scenario
+      success = addExpectedResult(updatedScenarios[scenarioIndex].scenarios);
+      
+      // Update the timestamp if successful
+      if (success) {
+        updatedScenarios[scenarioIndex].updatedAt = new Date().toISOString();
       }
-    } catch (error) {
-      testResult.success = false;
-      testResult.failureReason = `Error executing test: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    } finally {
-      // Restore original concept states
-      concepts.set(originalConcepts);
-    }
+      
+      return updatedScenarios;
+    });
     
-    // Save the test result
-    testResults.update(results => [...results, testResult]);
-    
-    return testResult;
+    return success;
   }
   
   /**
-   * Apply concept changes to the concept store
+   * Find a sub-scenario by ID
    */
-  static applyConceptChanges(conceptChanges: ConceptChange[]): void {
-    concepts.update(state => {
-      const newState = { ...state };
+  static findSubScenarioById(
+    scenarioId: string,
+    subScenarioId: string
+  ): TestSubScenario | null {
+    const scenarios = get(testScenarios);
+    const scenario = scenarios.find(s => s.id === scenarioId);
+    if (!scenario) return null;
+    
+    // Helper function to find the sub-scenario
+    const findSubScenario = (subScenarios: TestSubScenario[]): TestSubScenario | null => {
+      for (const subScenario of subScenarios) {
+        if (subScenario.id === subScenarioId) {
+          return subScenario;
+        }
+        
+        if (subScenario.children.length > 0) {
+          const found = findSubScenario(subScenario.children);
+          if (found) {
+            return found;
+          }
+        }
+      }
       
-      conceptChanges.forEach(change => {
+      return null;
+    };
+    
+    return findSubScenario(scenario.scenarios);
+  }
+  
+  /**
+   * Get all active concepts for a sub-scenario (including inherited from parents)
+   */
+  static getActiveConceptsForSubScenario(
+    scenarioId: string,
+    subScenarioId: string
+  ): ConceptChange[] {
+    const subScenario = this.findSubScenarioById(scenarioId, subScenarioId);
+    if (!subScenario) return [];
+    
+    let activeConcepts: ConceptChange[] = [...subScenario.concepts];
+    
+    // If this sub-scenario has a parent, get concepts from parent
+    if (subScenario.parentId) {
+      const parentConcepts = this.getActiveConceptsForSubScenario(scenarioId, subScenario.parentId);
+      
+      // Merge parent concepts with this sub-scenario's concepts
+      // If a concept exists in both, the child's value takes precedence
+      parentConcepts.forEach(parentConcept => {
+        if (!activeConcepts.some(c => c.conceptName === parentConcept.conceptName)) {
+          activeConcepts.push(parentConcept);
+        }
+      });
+    }
+    
+    return activeConcepts;
+  }
+  
+  /**
+   * Clear all concepts and reset to default state
+   */
+  static clearConcepts(): void {
+    concepts.update(state => {
+      const newState: Record<string, { value: boolean, isActive: boolean }> = {};
+      
+      // Reset all concepts to false and inactive
+      Object.keys(state).forEach(key => {
+        newState[key] = { value: false, isActive: false };
+      });
+      
+      return newState;
+    });
+    
+    // Dispatch events to update UI
+    const evaluateEvent = new CustomEvent('evaluate-order-sections', { bubbles: true });
+    document.dispatchEvent(evaluateEvent);
+    
+    const conceptsEvent = new CustomEvent('concepts-applied', {
+      detail: { concepts: [] },
+      bubbles: true
+    });
+    document.dispatchEvent(conceptsEvent);
+  }
+  
+  /**
+   * Apply concepts from a sub-scenario to the current state
+   */
+  static applySubScenarioConcepts(scenarioId: string, subScenarioId: string): void {
+    // First clear all concepts
+    this.clearConcepts();
+    
+    const activeConcepts = this.getActiveConceptsForSubScenario(scenarioId, subScenarioId);
+    
+    // Get all concept names from the active concepts
+    const activeConceptNames = new Set(activeConcepts.map(c => c.conceptName));
+    
+    // Update the concepts store directly
+    concepts.update(state => {
+      // Start with a fresh state
+      const newState: Record<string, { value: boolean, isActive: boolean }> = {};
+      
+      // First, copy over any existing concepts as inactive
+      Object.entries(state).forEach(([key, concept]) => {
+        if (!activeConceptNames.has(key)) {
+          newState[key] = { value: false, isActive: false };
+        }
+      });
+      
+      // Apply each concept change from the current scenario
+      activeConcepts.forEach(change => {
         newState[change.conceptName] = {
           value: change.value,
-          isActive: change.isActive,
-          description: newState[change.conceptName]?.description
+          isActive: change.isActive
         };
       });
       
       return newState;
     });
+    
+    // Dispatch an event to force re-evaluation of order sections
+    const evaluateEvent = new CustomEvent('evaluate-order-sections', { bubbles: true });
+    document.dispatchEvent(evaluateEvent);
+    
+    // Dispatch a concepts-applied event to trigger UI updates
+    const conceptsEvent = new CustomEvent('concepts-applied', {
+      detail: { concepts: activeConcepts },
+      bubbles: true
+    });
+    document.dispatchEvent(conceptsEvent);
   }
   
   /**
-   * Evaluate expected results against current state
+   * Execute a test for a sub-scenario
    */
-  private static evaluateExpectedResults(expectedResults: ExpectedResult[]): {
-    results: ExpectedResultOutcome[];
-    success: boolean;
-    failureReason?: string;
-  } {
-    const config = get(configStore);
-    if (!config) {
-      return {
-        results: [],
-        success: false,
-        failureReason: 'No configuration loaded'
-      };
-    }
+  static async executeSubScenarioTest(scenarioId: string, subScenarioId: string): Promise<TestResult | null> {
+    const subScenario = this.findSubScenarioById(scenarioId, subScenarioId);
+    if (!subScenario) return null;
     
-    const results: ExpectedResultOutcome[] = [];
-    let success = true;
-    let failureReason = '';
+    // Apply the concepts from the sub-scenario
+    this.applySubScenarioConcepts(scenarioId, subScenarioId);
     
-    for (const expectedResult of expectedResults) {
-      let actualVisibility = false;
-      
-      // Determine actual visibility based on the type of expected result
-      switch (expectedResult.type) {
-        case 'tab':
-          actualVisibility = this.isTabVisible(config, expectedResult.target);
-          break;
-        case 'section':
-          actualVisibility = this.isSectionVisible(config, expectedResult.target);
-          break;
-        case 'order':
-          actualVisibility = this.isOrderVisible(config, expectedResult.target);
-          break;
-        case 'criterion':
-          actualVisibility = this.isCriterionVisible(config, expectedResult.target);
-          break;
-      }
-      
-      const resultSuccess = actualVisibility === expectedResult.expectedVisibility;
-      
-      results.push({
-        expectedResult,
-        actualVisibility,
-        success: resultSuccess
-      });
-      
-      if (!resultSuccess) {
-        success = false;
-        failureReason += `${expectedResult.type} "${expectedResult.target}" expected to be ${expectedResult.expectedVisibility ? 'visible' : 'hidden'} but was ${actualVisibility ? 'visible' : 'hidden'}. `;
-      }
-    }
+    // TODO: Implement test execution logic for the new structure
+    // This would evaluate the expected results against the current state
     
-    return {
-      results,
-      success,
-      failureReason: failureReason.trim()
-    };
-  }
-  
-  /**
-   * Check if a tab is visible based on current concept states
-   */
-  private static isTabVisible(config: Config, tabKey: string): boolean {
-    const tab = config.RCONFIG.TABS.find(t => t.TAB_KEY === tabKey);
-    if (!tab) return false;
-    
-    // If the tab has a FLAG_ON_CONCEPT, evaluate it
-    if (tab.FLAG_ON_CONCEPT) {
-      try {
-        return this.evaluateConceptExpression(tab.FLAG_ON_CONCEPT);
-      } catch (error) {
-        console.error(`Error evaluating tab visibility for ${tabKey}:`, error);
-        return false;
-      }
-    }
-    
-    return true;
-  }
-  
-  /**
-   * Check if a section is visible based on current concept states
-   */
-  private static isSectionVisible(config: Config, sectionPath: string): boolean {
-    // sectionPath format: "tabKey:sectionName"
-    const [tabKey, sectionName] = sectionPath.split(':');
-    
-    const tab = config.RCONFIG.TABS.find(t => t.TAB_KEY === tabKey);
-    if (!tab) return false;
-    
-    const section = tab.ORDER_SECTIONS.find(s => s.SECTION_NAME === sectionName);
-    if (!section) return false;
-    
-    // If the section has a CONCEPT_NAME, evaluate it
-    if (section.CONCEPT_NAME) {
-      try {
-        return this.evaluateConceptExpression(section.CONCEPT_NAME);
-      } catch (error) {
-        console.error(`Error evaluating section visibility for ${sectionPath}:`, error);
-        return false;
-      }
-    }
-    
-    return true;
-  }
-  
-  /**
-   * Check if an order is visible based on current concept states
-   */
-  private static isOrderVisible(config: Config, orderPath: string): boolean {
-    // orderPath format: "tabKey:sectionName:orderMnemonic"
-    const [tabKey, sectionName, orderMnemonic] = orderPath.split(':');
-    
-    // First check if the section is visible
-    if (!this.isSectionVisible(config, `${tabKey}:${sectionName}`)) {
-      return false;
-    }
-    
-    const tab = config.RCONFIG.TABS.find(t => t.TAB_KEY === tabKey);
-    if (!tab) return false;
-    
-    const section = tab.ORDER_SECTIONS.find(s => s.SECTION_NAME === sectionName);
-    if (!section) return false;
-    
-    // Check if the order exists in the section
-    return section.ORDERS.some(o => o.MNEMONIC === orderMnemonic);
-  }
-  
-  /**
-   * Check if a criterion is visible based on current concept states
-   */
-  private static isCriterionVisible(config: Config, criterionPath: string): boolean {
-    // criterionPath format: "tabKey:criterionLabel"
-    const [tabKey, criterionLabel] = criterionPath.split(':');
-    
-    const tab = config.RCONFIG.TABS.find(t => t.TAB_KEY === tabKey);
-    if (!tab) return false;
-    
-    const criterion = tab.CRITERIA.find(c => c.LABEL === criterionLabel);
-    if (!criterion) return false;
-    
-    // If the criterion has a CONCEPT_NAME, evaluate it
-    if (criterion.CONCEPT_NAME) {
-      try {
-        return this.evaluateConceptExpression(criterion.CONCEPT_NAME);
-      } catch (error) {
-        console.error(`Error evaluating criterion visibility for ${criterionPath}:`, error);
-        return false;
-      }
-    }
-    
-    return true;
-  }
-  
-  /**
-   * Evaluate a concept expression
-   * This is a simplified version - in a real implementation, you would use
-   * the actual evaluateConceptExpression function from your stores
-   */
-  private static evaluateConceptExpression(expression: string): boolean {
-    // Get the current concept states
-    const currentConcepts = get(concepts);
-    
-    // Extract concept names from the expression
-    const conceptReferences: ConceptReference[] = [];
-    const extractedReferences = ConceptExtractionService.extractConceptsFromExpression(
-      expression, 
-      'Test Evaluation', 
-      'runtime',
-      conceptReferences
-    );
-    
-    const conceptNames = extractedReferences.map((ref: ConceptReference) => ref.name);
-    
-    // For this simplified implementation, we'll just check if all concepts are true
-    // In a real implementation, you would parse and evaluate the expression
-    return conceptNames.every((name: string) => 
-      currentConcepts[name]?.value === true && 
-      currentConcepts[name]?.isActive === true
-    );
-  }
-  
-  /**
-   * Generate test paths from concepts
-   */
-  static generateTestPathsFromConcepts(
-    scenarioId: string, 
-    conceptNames: string[], 
-    pathNamePrefix: string = 'Auto-generated path',
-    useDefaultValues: boolean = true
-  ): TestPath[] {
-    // Get all possible combinations of concept values
-    // For n concepts, there are 2^n possible combinations
-    const numCombinations = Math.pow(2, conceptNames.length);
-    const generatedPaths: TestPath[] = [];
-    
-    for (let i = 0; i < numCombinations; i++) {
-      // Create a binary representation of the current combination
-      const binaryStr = i.toString(2).padStart(conceptNames.length, '0');
-      
-      // Create concept changes based on the binary representation
-      const conceptChanges: ConceptChange[] = conceptNames.map((name, index) => ({
-        conceptName: name,
-        value: binaryStr[index] === '1',
-        isActive: true
-      }));
-      
-      // Create a descriptive name for this path
-      const pathDescription = conceptChanges
-        .map(change => `${change.conceptName}=${change.value ? 'true' : 'false'}`)
-        .join(', ');
-      
-      // Add the path to the scenario
-      const pathName = `${pathNamePrefix} ${i + 1}`;
-      const newPath = this.addPathToScenario(
-        scenarioId,
-        pathName,
-        `Test with ${pathDescription}`,
-        null
-      );
-      
-      if (newPath) {
-        // Add a single step with all concept changes
-        this.addStepToPath(
-          scenarioId,
-          newPath.id,
-          'Set concept values',
-          conceptChanges,
-          useDefaultValues
-        );
-        
-        generatedPaths.push(newPath);
-      }
-    }
-    
-    return generatedPaths;
+    return null;
   }
   
   /**
@@ -575,26 +427,26 @@ export class ConceptTestService {
    */
   static saveTestScenarios(): void {
     const scenarios = get(testScenarios);
-    localStorage.setItem('conceptTestScenarios', JSON.stringify(scenarios));
+    localStorage.setItem('testScenarios', JSON.stringify(scenarios));
   }
   
   /**
    * Load test scenarios from local storage
    */
   static loadTestScenarios(): void {
-    const savedScenarios = localStorage.getItem('conceptTestScenarios');
+    const savedScenarios = localStorage.getItem('testScenarios');
     if (savedScenarios) {
       try {
-        const scenarios = JSON.parse(savedScenarios);
-        testScenarios.set(scenarios);
+        const parsedScenarios = JSON.parse(savedScenarios) as TestScenario[];
+        testScenarios.set(parsedScenarios);
       } catch (error) {
-        console.error('Error loading test scenarios:', error);
+        console.error('Failed to parse saved test scenarios:', error);
       }
     }
   }
   
   /**
-   * Clear all test results
+   * Clear test results
    */
   static clearTestResults(): void {
     testResults.set([]);
@@ -619,5 +471,39 @@ export class ConceptTestService {
     }
     
     return visibilityMap[sectionName];
+  }
+  
+  /**
+   * Create a default Magnesium test scenario with required concepts
+   */
+  static createDefaultMagnesiumScenario(): TestScenario {
+    const scenario = this.createScenario(
+      'Magnesium Test Scenario', 
+      'Default scenario for testing Magnesium tab visibility'
+    );
+    
+    // Create a root sub-scenario
+    const rootSubScenario = this.addSubScenarioToScenario(
+      scenario.id,
+      'Show Magnesium Orders',
+      'This scenario enables the key concepts needed to show Magnesium orders'
+    );
+    
+    if (rootSubScenario) {
+      // Add the required concepts
+      const concepts: ConceptChange[] = [
+        { conceptName: 'EASHOWMAGORDERS', value: true, isActive: true },
+        { conceptName: 'EACRITERIAVALIDMAGRESULT4H', value: true, isActive: true },
+        { conceptName: 'EALABMAGBTW00AND13', value: true, isActive: true },
+        { conceptName: 'EAPROTOCOLMAGIV', value: true, isActive: true },
+        { conceptName: 'EAPROTOCOLMAGORAL', value: true, isActive: true },
+        { conceptName: 'EACRITERIANOTNPO', value: true, isActive: true },
+        { conceptName: 'EALABMAGBTW14AND19', value: true, isActive: true }
+      ];
+      
+      this.updateSubScenarioConcepts(scenario.id, rootSubScenario.id, concepts);
+    }
+    
+    return scenario;
   }
 } 

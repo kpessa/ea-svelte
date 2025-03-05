@@ -1,84 +1,191 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ConceptTestService, testScenarios, testResults } from '../services/conceptTestService';
-  import type { TestScenario, TestPath, TestStep, TestResult, ExpectedResult, ConceptChange } from '../types';
+  import { configStore } from '../services/configService';
+  import type { TestScenario, TestSubScenario, ExpectedResult, ConceptChange } from '../types';
   import { concepts } from '../stores';
   import ConceptHierarchySelector from './ConceptHierarchySelector.svelte';
+  import HierarchicalScenarioManager from './HierarchicalScenarioManager.svelte';
+  import ScenarioConceptEditor from './ScenarioConceptEditor.svelte';
   
+  let scenarios: TestScenario[] = [];
   let selectedScenarioId: string | null = null;
-  let selectedPathId: string | null = null;
+  let selectedSubScenarioId: string | null = null;
   let newScenarioName = '';
   let newScenarioDescription = '';
-  let newPathName = '';
-  let newPathDescription = '';
-  let newStepName = '';
+  let newSubScenarioName = '';
+  let newSubScenarioDescription = '';
   let newExpectedResultType: 'tab' | 'section' | 'order' | 'criterion' = 'tab';
   let newExpectedResultTarget = '';
   let newExpectedResultVisibility = true;
   let newExpectedResultDescription = '';
-  let conceptsForGeneration: string[] = [];
-  let isGeneratingTests = false;
-  let testPathVisualizationMode: 'list' | 'graph' = 'list';
-  let showDefaultsSelector = false;
+  let isEditMode: boolean = false;
+  let showCreateScenarioForm = false;
+  let showCreateSubScenarioForm = false;
+  let showConceptEditor = false;
+  let showExpectedResultForm = false;
+  let parentSubScenarioId: string | null = null;
+  let showAppliedConceptsSummary = false;
+  let appliedConcepts: ConceptChange[] = [];
+  let inheritedConcepts: ConceptChange[] = [];
   
-  // For concept changes in steps
-  let selectedConcepts: string[] = [];
-  let conceptChangeValues: Record<string, boolean> = {};
-  let conceptChangeActive: Record<string, boolean> = {};
-  
-  // For default values
-  let defaultSelectedConcepts: string[] = [];
-  let defaultConceptChangeValues: Record<string, boolean> = {};
-  let defaultConceptChangeActive: Record<string, boolean> = {};
+  // For editing concepts
+  let editingSubScenario: TestSubScenario | null = null;
+  let parentConcepts: ConceptChange[] = [];
   
   $: selectedScenario = selectedScenarioId 
-    ? $testScenarios.find(s => s.id === selectedScenarioId) 
+    ? scenarios.find(s => s.id === selectedScenarioId) 
     : null;
-    
-  $: selectedPath = selectedScenario && selectedPathId 
-    ? selectedScenario.paths.find(p => p.id === selectedPathId) 
-    : null;
-    
+  
   $: availableConcepts = Object.keys($concepts).sort();
   
   onMount(() => {
-    ConceptTestService.loadTestScenarios();
+    loadScenarios();
+    
+    // Set up auto-save for scenarios
+    const unsubscribe = testScenarios.subscribe(value => {
+      // Don't save on initial load
+      if (value.length > 0) {
+        console.log('Auto-saving test scenarios...');
+        ConceptTestService.saveTestScenarios();
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   });
+  
+  async function loadScenarios() {
+    ConceptTestService.loadTestScenarios();
+    scenarios = $testScenarios;
+    
+    // If no scenarios exist, create default scenarios
+    if (scenarios.length === 0) {
+      console.log('No saved scenarios found, creating default scenarios');
+      
+      // Create a general default scenario
+      const defaultScenario = ConceptTestService.createScenario(
+        'Default Scenario', 
+        'This is a default scenario created automatically'
+      );
+      
+      // Create a Magnesium-specific scenario
+      const magnesiumScenario = ConceptTestService.createDefaultMagnesiumScenario();
+      
+      // Refresh the scenarios list
+      scenarios = $testScenarios;
+      
+      // Select the Magnesium scenario by default
+      selectedScenarioId = magnesiumScenario.id;
+    } else {
+      console.log('Loaded', scenarios.length, 'scenarios from storage');
+      selectedScenarioId = scenarios[0].id;
+    }
+  }
+  
+  function handleScenarioChange(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    selectedScenarioId = select.value;
+    selectedSubScenarioId = null;
+  }
+  
+  function handleSubScenarioSelect(subScenarioId: string) {
+    selectedSubScenarioId = subScenarioId;
+  }
   
   function createScenario() {
     if (newScenarioName.trim()) {
-      ConceptTestService.createScenario(newScenarioName, newScenarioDescription);
+      const newScenario = ConceptTestService.createScenario(newScenarioName, newScenarioDescription);
       newScenarioName = '';
       newScenarioDescription = '';
+      showCreateScenarioForm = false;
+      loadScenarios();
+      // Select the newly created scenario
+      if (newScenario) {
+        selectedScenarioId = newScenario.id;
+      }
     }
   }
   
-  function addPath() {
-    if (selectedScenarioId && newPathName.trim()) {
-      ConceptTestService.addPathToScenario(selectedScenarioId, newPathName, newPathDescription);
-      newPathName = '';
-      newPathDescription = '';
-    }
-  }
-  
-  function addStep() {
-    if (selectedScenarioId && selectedPathId && newStepName.trim() && selectedConcepts.length > 0) {
-      const conceptChanges: ConceptChange[] = selectedConcepts.map(conceptName => ({
-        conceptName,
-        value: conceptChangeValues[conceptName] || false,
-        isActive: conceptChangeActive[conceptName] || true
-      }));
+  function addSubScenario() {
+    if (selectedScenarioId && newSubScenarioName.trim()) {
+      const newSubScenario = ConceptTestService.addSubScenarioToScenario(
+        selectedScenarioId, 
+        newSubScenarioName, 
+        newSubScenarioDescription,
+        parentSubScenarioId
+      );
       
-      ConceptTestService.addStepToPath(selectedScenarioId, selectedPathId, newStepName, conceptChanges);
-      newStepName = '';
-      selectedConcepts = [];
-      conceptChangeValues = {};
-      conceptChangeActive = {};
+      newSubScenarioName = '';
+      newSubScenarioDescription = '';
+      showCreateSubScenarioForm = false;
+      parentSubScenarioId = null;
+      
+      // Force refresh of the scenarios
+      scenarios = [...$testScenarios];
+      
+      // Select the newly created sub-scenario
+      if (newSubScenario) {
+        selectedSubScenarioId = newSubScenario.id;
+      }
+    }
+  }
+  
+  function handleAddSubScenario(event: CustomEvent) {
+    parentSubScenarioId = event.detail.parentId;
+    showCreateSubScenarioForm = true;
+  }
+  
+  function editSelectedSubScenario() {
+    if (selectedScenarioId && selectedSubScenarioId) {
+      editingSubScenario = ConceptTestService.findSubScenarioById(selectedScenarioId, selectedSubScenarioId);
+      
+      // If this sub-scenario has a parent, get the parent's concepts
+      if (editingSubScenario && editingSubScenario.parentId) {
+        parentConcepts = ConceptTestService.getActiveConceptsForSubScenario(
+          selectedScenarioId, 
+          editingSubScenario.parentId
+        );
+      } else {
+        parentConcepts = [];
+      }
+      
+      showConceptEditor = true;
+    }
+  }
+  
+  function handleEditConcepts(event: CustomEvent) {
+    const subScenarioId = event.detail.scenarioId;
+    
+    if (selectedScenarioId && subScenarioId) {
+      editingSubScenario = ConceptTestService.findSubScenarioById(selectedScenarioId, subScenarioId);
+      
+      // If this sub-scenario has a parent, get the parent's concepts
+      if (editingSubScenario && editingSubScenario.parentId) {
+        parentConcepts = ConceptTestService.getActiveConceptsForSubScenario(
+          selectedScenarioId, 
+          editingSubScenario.parentId
+        );
+      } else {
+        parentConcepts = [];
+      }
+      
+      showConceptEditor = true;
+    }
+  }
+  
+  function handleAddExpectedResult(event: CustomEvent) {
+    const subScenarioId = event.detail.scenarioId;
+    
+    if (selectedScenarioId && subScenarioId) {
+      selectedSubScenarioId = subScenarioId;
+      showExpectedResultForm = true;
     }
   }
   
   function addExpectedResult() {
-    if (selectedScenarioId && selectedPathId && newExpectedResultTarget.trim()) {
+    if (selectedScenarioId && selectedSubScenarioId && newExpectedResultTarget.trim()) {
       const expectedResult: ExpectedResult = {
         type: newExpectedResultType,
         target: newExpectedResultTarget,
@@ -86,657 +193,1002 @@
         description: newExpectedResultDescription
       };
       
-      ConceptTestService.addExpectedResultToPath(selectedScenarioId, selectedPathId, expectedResult);
+      ConceptTestService.addExpectedResultToSubScenario(
+        selectedScenarioId, 
+        selectedSubScenarioId, 
+        expectedResult
+      );
+      
       newExpectedResultType = 'tab';
       newExpectedResultTarget = '';
       newExpectedResultVisibility = true;
       newExpectedResultDescription = '';
+      showExpectedResultForm = false;
+      
+      // Force refresh of the scenarios
+      scenarios = [...$testScenarios];
     }
+  }
+  
+  function handleSaveConcepts(event: CustomEvent) {
+    const { conceptChanges } = event.detail;
+    
+    if (selectedScenarioId && editingSubScenario && conceptChanges) {
+      ConceptTestService.updateSubScenarioConcepts(
+        selectedScenarioId,
+        editingSubScenario.id,
+        conceptChanges
+      );
+      
+      showConceptEditor = false;
+      editingSubScenario = null;
+      parentConcepts = [];
+      
+      // Force refresh of the scenarios
+      scenarios = [...$testScenarios];
+    }
+  }
+  
+  function handleCancelEditConcepts() {
+    showConceptEditor = false;
+    editingSubScenario = null;
+    parentConcepts = [];
   }
   
   async function executeTest() {
-    if (selectedScenarioId && selectedPathId) {
-      await ConceptTestService.executeTestPath(selectedScenarioId, selectedPathId);
+    if (selectedScenarioId && selectedSubScenarioId) {
+      await ConceptTestService.executeSubScenarioTest(selectedScenarioId, selectedSubScenarioId);
     }
   }
   
-  function generateTestPaths() {
-    if (selectedScenarioId && conceptsForGeneration.length > 0) {
-      isGeneratingTests = true;
-      try {
-        ConceptTestService.generateTestPathsFromConcepts(
-          selectedScenarioId,
-          conceptsForGeneration
+  function applySubScenarioConcepts() {
+    if (selectedScenarioId && selectedSubScenarioId) {
+      console.log('Starting to apply concepts for scenario:', selectedScenarioId, 'sub-scenario:', selectedSubScenarioId);
+      
+      // Get all active concepts for the selected sub-scenario
+      const allConcepts = ConceptTestService.getActiveConceptsForSubScenario(
+        selectedScenarioId, 
+        selectedSubScenarioId
+      );
+      
+      console.log('Retrieved active concepts:', allConcepts);
+      
+      // Find the selected sub-scenario
+      const subScenario = ConceptTestService.findSubScenarioById(
+        selectedScenarioId, 
+        selectedSubScenarioId
+      );
+      
+      if (subScenario) {
+        // Separate directly defined concepts from inherited ones
+        const directConcepts = subScenario.concepts;
+        inheritedConcepts = allConcepts.filter(concept => 
+          !directConcepts.some(dc => dc.conceptName === concept.conceptName)
         );
-        conceptsForGeneration = [];
-      } finally {
-        isGeneratingTests = false;
+        
+        // Store all applied concepts for display
+        appliedConcepts = allConcepts;
+        
+        console.log('About to call ConceptTestService.applySubScenarioConcepts');
+        // Apply the concepts
+        ConceptTestService.applySubScenarioConcepts(selectedScenarioId, selectedSubScenarioId);
+        console.log('Concepts applied via ConceptTestService');
+        
+        // Dispatch a custom event to notify the application to re-evaluate visibility
+        const event = new CustomEvent('concepts-applied', { 
+          detail: { concepts: allConcepts },
+          bubbles: true 
+        });
+        console.log('Dispatching concepts-applied event:', event);
+        document.dispatchEvent(event);
+        console.log('Event dispatched');
+        
+        // Show the summary
+        showAppliedConceptsSummary = true;
       }
     }
+  }
+  
+  function closeAppliedConceptsSummary() {
+    showAppliedConceptsSummary = false;
+  }
+  
+  function clearAllConcepts() {
+    ConceptTestService.clearConcepts();
   }
   
   function saveScenarios() {
     ConceptTestService.saveTestScenarios();
   }
   
-  function handleConceptsChanged(event: CustomEvent) {
-    const { selectedConcepts: newSelectedConcepts, conceptChangeValues: newValues, conceptChangeActive: newActive } = event.detail;
-    
-    if (newSelectedConcepts) {
-      selectedConcepts = newSelectedConcepts;
-    }
-    
-    if (newValues) {
-      conceptChangeValues = newValues;
-    }
-    
-    if (newActive) {
-      conceptChangeActive = newActive;
-    }
-  }
-  
-  function handleDefaultConceptsChanged(event: CustomEvent) {
-    const { selectedConcepts: newSelectedConcepts, conceptChangeValues: newValues, conceptChangeActive: newActive } = event.detail;
-    
-    if (newSelectedConcepts) {
-      defaultSelectedConcepts = newSelectedConcepts;
-    }
-    
-    if (newValues) {
-      defaultConceptChangeValues = newValues;
-    }
-    
-    if (newActive) {
-      defaultConceptChangeActive = newActive;
-    }
-  }
-  
-  function toggleDefaultsSelector() {
-    showDefaultsSelector = !showDefaultsSelector;
-  }
-  
   function clearTestResults() {
     ConceptTestService.clearTestResults();
   }
   
-  function getResultClass(success: boolean) {
-    return success ? 'success' : 'failure';
+  function toggleEditMode() {
+    isEditMode = !isEditMode;
+  }
+  
+  function toggleCreateScenarioForm() {
+    showCreateScenarioForm = !showCreateScenarioForm;
+  }
+  
+  function toggleCreateSubScenarioForm() {
+    showCreateSubScenarioForm = !showCreateSubScenarioForm;
+    parentSubScenarioId = null;
+  }
+  
+  function toggleExpectedResultForm() {
+    showExpectedResultForm = !showExpectedResultForm;
+  }
+  
+  function createMagnesiumScenario() {
+    const magnesiumScenario = ConceptTestService.createDefaultMagnesiumScenario();
+    selectedScenarioId = magnesiumScenario.id;
+    alert('Magnesium scenario created successfully!');
+  }
+  
+  function setMagnesiumConcepts() {
+    // Directly set the concepts needed for Magnesium orders
+    concepts.update(state => {
+      const newState = { ...state };
+      
+      // Set all the required concepts for Magnesium
+      newState['EASHOWMAGORDERS'] = { value: true, isActive: true };
+      newState['EACRITERIAVALIDMAGRESULT4H'] = { value: true, isActive: true };
+      newState['EALABMAGBTW00AND13'] = { value: true, isActive: true };
+      newState['EAPROTOCOLMAGIV'] = { value: true, isActive: true };
+      newState['EAPROTOCOLMAGORAL'] = { value: true, isActive: true };
+      newState['EACRITERIANOTNPO'] = { value: false, isActive: true };
+      newState['EALABMAGBTW14AND19'] = { value: true, isActive: true };
+      
+      console.log('Directly set Magnesium concepts:', newState);
+      
+      // Dispatch a custom event to notify the application to re-evaluate visibility
+      const event = new CustomEvent('concepts-applied', { 
+        detail: { concepts: Object.keys(newState).map(key => ({ 
+          conceptName: key, 
+          value: newState[key].value, 
+          isActive: newState[key].isActive 
+        })) },
+        bubbles: true 
+      });
+      console.log('Dispatching concepts-applied event after direct set:', event);
+      document.dispatchEvent(event);
+      
+      // Also dispatch an event to force re-evaluation of order sections
+      const evaluateEvent = new CustomEvent('evaluate-order-sections', { bubbles: true });
+      console.log('Dispatching evaluate-order-sections event');
+      document.dispatchEvent(evaluateEvent);
+      
+      return newState;
+    });
+    
+    alert('Magnesium concepts set directly!');
+  }
+  
+  function setConceptsDirectly() {
+    // Get all tabs from the config
+    const allTabs = $configStore?.RCONFIG.TABS || [];
+    
+    if (allTabs.length === 0) {
+      console.error('No tabs found in config');
+      return;
+    }
+    
+    console.log('Setting concepts for all tabs');
+    
+    // Get all the concept expressions from all sections in all tabs
+    const conceptExpressions: string[] = [];
+    allTabs.forEach(tab => {
+      tab.ORDER_SECTIONS.forEach(section => {
+        if (section.CONCEPT_NAME) {
+          conceptExpressions.push(section.CONCEPT_NAME);
+        }
+      });
+    });
+    
+    console.log('Setting concepts directly from expressions:', conceptExpressions);
+    
+    // Extract all concept names from the expressions
+    const conceptNames = new Set<string>();
+    conceptExpressions.forEach(expr => {
+      // Simple regex to extract concept names from expressions like {CONCEPTNAME}
+      const matches = expr.match(/\{([^}]+)\}/g);
+      if (matches) {
+        matches.forEach(match => {
+          // Remove the curly braces
+          const conceptName = match.substring(1, match.length - 1);
+          conceptNames.add(conceptName);
+        });
+      }
+    });
+    
+    console.log('Extracted concept names:', Array.from(conceptNames));
+    
+    // Set all concepts to true
+    const conceptChanges: Record<string, { value: boolean, isActive: boolean }> = {};
+    conceptNames.forEach(name => {
+      conceptChanges[name] = { value: true, isActive: true };
+    });
+    
+    // Update the concepts store
+    concepts.update(state => {
+      const newState = { ...state, ...conceptChanges };
+      console.log('Updated concepts store:', newState);
+      return newState;
+    });
+    
+    // Dispatch the concepts-applied event
+    const event = new CustomEvent('concepts-applied', { 
+      detail: { concepts: Array.from(conceptNames).map(name => ({ conceptName: name, value: true, isActive: true })) },
+      bubbles: true 
+    });
+    console.log('Dispatching concepts-applied event after direct set:', event);
+    document.dispatchEvent(event);
+    
+    // Also dispatch the evaluate-order-sections event
+    const evaluateEvent = new CustomEvent('evaluate-order-sections', { bubbles: true });
+    console.log('Dispatching evaluate-order-sections event');
+    document.dispatchEvent(evaluateEvent);
+    
+    alert(`All concepts (${conceptNames.size}) have been set to TRUE. The sections should now be visible.`);
   }
 </script>
 
 <div class="concept-test-manager">
-  <h2>Concept Test Framework</h2>
-  
-  <div class="test-manager-container">
-    <div class="test-scenarios-panel">
-      <h3>Test Scenarios</h3>
-      
-      <div class="scenario-list">
-        {#if $testScenarios.length === 0}
-          <p>No test scenarios available. Create one below.</p>
-        {:else}
-          <ul>
-            {#each $testScenarios as scenario}
-              <li class:selected={selectedScenarioId === scenario.id}>
-                <button on:click={() => selectedScenarioId = scenario.id}>
-                  {scenario.name}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
-      
-      <div class="create-scenario">
-        <h4>Create New Scenario</h4>
-        <input 
-          type="text" 
-          placeholder="Scenario Name" 
-          bind:value={newScenarioName}
-        />
-        <textarea 
-          placeholder="Scenario Description" 
-          bind:value={newScenarioDescription}
-        ></textarea>
-        <button on:click={createScenario}>Create Scenario</button>
-      </div>
-      
-      <button on:click={saveScenarios} class="save-button">Save All Scenarios</button>
-      
-      <div class="defaults-section">
-        <button on:click={toggleDefaultsSelector} class="defaults-button">
-          {showDefaultsSelector ? 'Hide Default Values' : 'Set Default Concept Values'}
-        </button>
-        
-        {#if showDefaultsSelector}
-          <div class="defaults-selector">
-            <p class="defaults-info">
-              Set default values for concepts that will be applied to all new test steps.
-            </p>
-            <div class="defaults-container">
-              <ConceptHierarchySelector 
-                bind:selectedConcepts={defaultSelectedConcepts}
-                bind:conceptChangeValues={defaultConceptChangeValues}
-                bind:conceptChangeActive={defaultConceptChangeActive}
-                on:conceptsChanged={handleDefaultConceptsChanged}
-                useAsDefaults={true}
-              />
-            </div>
-          </div>
-        {/if}
-      </div>
+  <div class="manager-header">
+    <h2>Test Case Manager</h2>
+    
+    <div class="header-actions">
+      <button class="action-btn" on:click={saveScenarios}>
+        Save Scenarios
+      </button>
+      <button class="action-btn" on:click={clearTestResults}>
+        Clear Test Results
+      </button>
+      <button class="action-btn {isEditMode ? 'active' : ''}" on:click={toggleEditMode}>
+        {isEditMode ? 'Exit Edit Mode' : 'Enter Edit Mode'}
+      </button>
     </div>
-    
-    {#if selectedScenario}
-      <div class="test-paths-panel">
-        <h3>Test Paths for {selectedScenario.name}</h3>
-        
-        <div class="visualization-toggle">
-          <button 
-            class:active={testPathVisualizationMode === 'list'} 
-            on:click={() => testPathVisualizationMode = 'list'}
-          >
-            List View
-          </button>
-          <button 
-            class:active={testPathVisualizationMode === 'graph'} 
-            on:click={() => testPathVisualizationMode = 'graph'}
-          >
-            Graph View
-          </button>
-        </div>
-        
-        {#if testPathVisualizationMode === 'list'}
-          <div class="path-list">
-            {#if selectedScenario.paths.length === 0}
-              <p>No test paths available. Create one below.</p>
-            {:else}
-              <ul>
-                {#each selectedScenario.paths as path}
-                  <li class:selected={selectedPathId === path.id}>
-                    <button on:click={() => selectedPathId = path.id}>
-                      {path.name}
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
-        {:else}
-          <div class="path-graph">
-            <!-- Graph visualization would go here -->
-            <p>Graph visualization of test paths</p>
-            <!-- This would be implemented with a visualization library like D3.js -->
-          </div>
-        {/if}
-        
-        <div class="create-path">
-          <h4>Add New Path</h4>
-          <input 
-            type="text" 
-            placeholder="Path Name" 
-            bind:value={newPathName}
-          />
-          <textarea 
-            placeholder="Path Description" 
-            bind:value={newPathDescription}
-          ></textarea>
-          <button on:click={addPath}>Add Path</button>
-        </div>
-        
-        <div class="generate-paths">
-          <h4>Generate Test Paths from Concepts</h4>
-          <div class="concept-selector">
-            <select multiple bind:value={conceptsForGeneration}>
-              {#each availableConcepts as concept}
-                <option value={concept}>{concept}</option>
-              {/each}
-            </select>
-          </div>
-          <button on:click={generateTestPaths} disabled={isGeneratingTests}>
-            {isGeneratingTests ? 'Generating...' : 'Generate Test Paths'}
-          </button>
-        </div>
-      </div>
-    {/if}
-    
-    {#if selectedPath}
-      <div class="test-details-panel">
-        <h3>Test Path: {selectedPath.name}</h3>
-        
-        <div class="test-steps">
-          <h4>Steps</h4>
-          {#if selectedPath.steps.length === 0}
-            <p>No steps defined. Add steps below.</p>
-          {:else}
-            <ol>
-              {#each selectedPath.steps as step}
-                <li>
-                  <strong>{step.name}</strong>
-                  <ul class="concept-changes">
-                    {#each step.conceptChanges as change}
-                      <li>
-                        {change.conceptName}: 
-                        {change.value ? 'true' : 'false'}, 
-                        {change.isActive ? 'active' : 'inactive'}
-                      </li>
-                    {/each}
-                  </ul>
-                </li>
-              {/each}
-            </ol>
-          {/if}
-          
-          <div class="add-step">
-            <h5>Add Step</h5>
-            <input 
-              type="text" 
-              placeholder="Step Name" 
-              bind:value={newStepName}
-            />
-            
-            <div class="concept-selection-container">
-              <h6>Select Concepts to Change</h6>
-              <div class="concept-selection">
-                <ConceptHierarchySelector 
-                  bind:selectedConcepts={selectedConcepts}
-                  bind:conceptChangeValues={conceptChangeValues}
-                  bind:conceptChangeActive={conceptChangeActive}
-                  on:conceptsChanged={handleConceptsChanged}
-                />
-              </div>
-            </div>
-            
-            <button on:click={addStep}>Add Step</button>
-          </div>
-        </div>
-        
-        <div class="expected-results">
-          <h4>Expected Results</h4>
-          {#if selectedPath.expectedResults.length === 0}
-            <p>No expected results defined. Add them below.</p>
-          {:else}
-            <ul>
-              {#each selectedPath.expectedResults as result}
-                <li>
-                  <strong>{result.type}:</strong> {result.target} 
-                  should be {result.expectedVisibility ? 'visible' : 'hidden'}
-                  <p>{result.description}</p>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-          
-          <div class="add-expected-result">
-            <h5>Add Expected Result</h5>
-            <div class="form-row">
-              <label>
-                Type:
-                <select bind:value={newExpectedResultType}>
-                  <option value="tab">Tab</option>
-                  <option value="section">Section</option>
-                  <option value="order">Order</option>
-                  <option value="criterion">Criterion</option>
-                </select>
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                Target:
-                <input 
-                  type="text" 
-                  placeholder="Target ID" 
-                  bind:value={newExpectedResultTarget}
-                />
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                Expected Visibility:
-                <input 
-                  type="checkbox" 
-                  bind:checked={newExpectedResultVisibility}
-                />
-              </label>
-            </div>
-            
-            <div class="form-row">
-              <label>
-                Description:
-                <textarea 
-                  placeholder="Description" 
-                  bind:value={newExpectedResultDescription}
-                ></textarea>
-              </label>
-            </div>
-            
-            <button on:click={addExpectedResult}>Add Expected Result</button>
-          </div>
-        </div>
-        
-        <div class="test-execution">
-          <h4>Test Execution</h4>
-          <button on:click={executeTest} class="execute-button">Execute Test</button>
-          <button on:click={clearTestResults} class="clear-button">Clear Results</button>
-        </div>
-      </div>
-    {/if}
   </div>
   
-  {#if $testResults.length > 0}
-    <div class="test-results">
-      <h3>Test Results</h3>
+  <div class="scenario-selection">
+    <div class="scenario-select">
+      <label for="scenario-select">Select Scenario:</label>
+      <select id="scenario-select" on:change={handleScenarioChange}>
+        {#each scenarios as scenario}
+          <option value={scenario.id} selected={scenario.id === selectedScenarioId}>
+            {scenario.name}
+          </option>
+        {/each}
+      </select>
+    </div>
+    
+    <div class="scenario-actions">
+      <button class="action-btn" on:click={toggleCreateScenarioForm}>
+        Create New Scenario
+      </button>
+      <button class="action-btn" on:click={createMagnesiumScenario}>Create Default Scenario</button>
+      <button class="action-btn" on:click={setConceptsDirectly}>Set All Concepts</button>
+    </div>
+  </div>
+  
+  {#if showCreateScenarioForm}
+    <div class="form-panel">
+      <h3>Create New Scenario</h3>
       
-      {#each $testResults as result}
-        <div class="test-result {getResultClass(result.success)}">
-          <h4>
-            {result.success ? '✅' : '❌'} 
-            Test: {$testScenarios.find(s => s.id === result.scenarioId)?.name || 'Unknown'} - 
-            {$testScenarios.find(s => s.id === result.scenarioId)?.paths.find(p => p.id === result.pathId)?.name || 'Unknown'}
-          </h4>
-          
-          {#if !result.success}
-            <p class="failure-reason">{result.failureReason}</p>
+      <div class="form-group">
+        <label for="new-scenario-name">Name:</label>
+        <input 
+          type="text" 
+          id="new-scenario-name" 
+          bind:value={newScenarioName} 
+          placeholder="Enter scenario name"
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="new-scenario-description">Description:</label>
+        <textarea 
+          id="new-scenario-description" 
+          bind:value={newScenarioDescription} 
+          placeholder="Enter scenario description"
+        ></textarea>
+      </div>
+      
+      <div class="form-actions">
+        <button class="cancel-btn" on:click={toggleCreateScenarioForm}>Cancel</button>
+        <button class="submit-btn" on:click={createScenario}>Create Scenario</button>
+      </div>
+    </div>
+  {/if}
+  
+  {#if showCreateSubScenarioForm}
+    <div class="form-panel">
+      <h3>Add {parentSubScenarioId ? 'Sub-Scenario' : 'Root Scenario'}</h3>
+      
+      <div class="form-group">
+        <label for="new-subscenario-name">Name:</label>
+        <input 
+          type="text" 
+          id="new-subscenario-name" 
+          bind:value={newSubScenarioName} 
+          placeholder="Enter scenario name"
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="new-subscenario-description">Description:</label>
+        <textarea 
+          id="new-subscenario-description" 
+          bind:value={newSubScenarioDescription} 
+          placeholder="Enter scenario description"
+        ></textarea>
+      </div>
+      
+      <div class="form-actions">
+        <button class="cancel-btn" on:click={toggleCreateSubScenarioForm}>Cancel</button>
+        <button class="submit-btn" on:click={addSubScenario}>Add {parentSubScenarioId ? 'Sub-Scenario' : 'Root Scenario'}</button>
+      </div>
+    </div>
+  {/if}
+  
+  {#if showExpectedResultForm}
+    <div class="form-panel">
+      <h3>Add Expected Result</h3>
+      
+      <div class="form-group">
+        <label for="expected-result-type">Type:</label>
+        <select id="expected-result-type" bind:value={newExpectedResultType}>
+          <option value="tab">Tab</option>
+          <option value="section">Section</option>
+          <option value="order">Order</option>
+          <option value="criterion">Criterion</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="expected-result-target">Target:</label>
+        <input 
+          type="text" 
+          id="expected-result-target" 
+          bind:value={newExpectedResultTarget} 
+          placeholder="Enter target (e.g., MAGNESIUM for tab)"
+        />
+      </div>
+      
+      <div class="form-group">
+        <label for="expected-result-visibility">Expected Visibility:</label>
+        <div class="toggle-switch">
+          <input 
+            type="checkbox" 
+            id="expected-result-visibility" 
+            bind:checked={newExpectedResultVisibility} 
+          />
+          <label for="expected-result-visibility"></label>
+          <span>{newExpectedResultVisibility ? 'Visible' : 'Hidden'}</span>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="expected-result-description">Description:</label>
+        <textarea 
+          id="expected-result-description" 
+          bind:value={newExpectedResultDescription} 
+          placeholder="Enter description (optional)"
+        ></textarea>
+      </div>
+      
+      <div class="form-actions">
+        <button class="cancel-btn" on:click={toggleExpectedResultForm}>Cancel</button>
+        <button class="submit-btn" on:click={addExpectedResult}>Add Expected Result</button>
+      </div>
+    </div>
+  {/if}
+  
+  {#if selectedScenario}
+    <div class="scenario-content">
+      <div class="scenario-info">
+        <h3>{selectedScenario.name}</h3>
+        <p>{selectedScenario.description}</p>
+        
+        <div class="scenario-primary-actions">
+          {#if isEditMode}
+            <button class="action-btn primary" on:click={toggleCreateSubScenarioForm}>
+              Add Root Scenario
+            </button>
           {/if}
-          
-          <div class="step-results">
-            {#each result.steps as stepResult}
-              <div class="step-result {getResultClass(stepResult.success)}">
-                <h5>
-                  {stepResult.success ? '✅' : '❌'} 
-                  Step: {$testScenarios.find(s => s.id === result.scenarioId)?.paths.find(p => p.id === result.pathId)?.steps.find(s => s.id === stepResult.stepId)?.name || 'Unknown'}
-                </h5>
-                
-                <div class="result-details">
-                  <h6>Concept States:</h6>
-                  <ul class="concept-states">
-                    {#each Object.entries(stepResult.conceptStates) as [name, state]}
-                      <li>
-                        {name}: {state.value ? 'true' : 'false'}, {state.isActive ? 'active' : 'inactive'}
-                      </li>
-                    {/each}
-                  </ul>
-                  
-                  <h6>Expected Results:</h6>
-                  <ul class="result-outcomes">
-                    {#each stepResult.results as outcome}
-                      <li class={getResultClass(outcome.success)}>
-                        {outcome.success ? '✅' : '❌'} 
-                        {outcome.expectedResult.type}: {outcome.expectedResult.target} 
-                        expected to be {outcome.expectedResult.expectedVisibility ? 'visible' : 'hidden'}, 
-                        was {outcome.actualVisibility ? 'visible' : 'hidden'}
-                      </li>
-                    {/each}
-                  </ul>
-                </div>
-              </div>
-            {/each}
+        </div>
+      </div>
+      
+      {#if selectedScenario.scenarios.length === 0}
+        <div class="empty-scenarios">
+          <p>No scenarios defined yet for this test case.</p>
+          {#if isEditMode}
+            <button class="add-first-scenario-btn" on:click={toggleCreateSubScenarioForm}>
+              Add Your First Scenario
+            </button>
+          {/if}
+        </div>
+      {:else}
+        <div class="scenario-manager">
+          <HierarchicalScenarioManager 
+            scenario={selectedScenario}
+            selectedScenarioId={selectedSubScenarioId}
+            onScenarioSelect={handleSubScenarioSelect}
+            isEditable={isEditMode}
+            on:addSubScenario={handleAddSubScenario}
+            on:editConcepts={handleEditConcepts}
+            on:addExpectedResult={handleAddExpectedResult}
+          />
+        </div>
+      {/if}
+      
+      {#if selectedSubScenarioId}
+        <div class="selected-subscenario-actions">
+          <div class="action-panel">
+            <h4>Selected Scenario Actions</h4>
+            <div class="action-buttons">
+              <button class="action-btn" on:click={editSelectedSubScenario}>
+                Edit Concepts
+              </button>
+              <button class="action-btn" on:click={toggleExpectedResultForm}>
+                Add Expected Result
+              </button>
+              <button 
+                class="btn btn-primary" 
+                on:click={applySubScenarioConcepts}
+                disabled={!selectedScenarioId || !selectedSubScenarioId}
+              >
+                Apply Concepts
+              </button>
+              <button 
+                class="btn btn-danger" 
+                on:click={clearAllConcepts}
+                title="Clear all concepts and reset to default state"
+              >
+                Clear All Concepts
+              </button>
+              <button 
+                class="btn btn-secondary" 
+                on:click={setMagnesiumConcepts}
+                title="Set key concepts for Magnesium tab"
+              >
+                Set Magnesium Concepts
+              </button>
+              <button class="action-btn" on:click={executeTest}>
+                Execute Test
+              </button>
+            </div>
           </div>
         </div>
-      {/each}
+      {/if}
+    </div>
+  {:else}
+    <div class="empty-state">
+      <p>No scenarios available. Create a new scenario to get started.</p>
+    </div>
+  {/if}
+  
+  {#if showConceptEditor && editingSubScenario}
+    <div class="modal-overlay">
+      <div class="modal-content">
+        <ScenarioConceptEditor 
+          scenario={editingSubScenario}
+          parentConcepts={parentConcepts}
+          on:save={handleSaveConcepts}
+          on:cancel={handleCancelEditConcepts}
+        />
+      </div>
+    </div>
+  {/if}
+  
+  {#if showAppliedConceptsSummary}
+    <div class="modal-overlay" on:click={closeAppliedConceptsSummary}>
+      <div class="modal-content summary-modal" on:click|stopPropagation>
+        <div class="summary-header">
+          <h3>Applied Concepts Summary</h3>
+          <button class="close-btn" on:click={closeAppliedConceptsSummary}>×</button>
+        </div>
+        
+        <div class="summary-content">
+          <p>Successfully applied {appliedConcepts.length} concepts to the application.</p>
+          
+          {#if inheritedConcepts.length > 0}
+            <div class="inherited-concepts-summary">
+              <h4>Inherited Concepts ({inheritedConcepts.length})</h4>
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th>Concept</th>
+                    <th>Value</th>
+                    <th>Active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each inheritedConcepts as concept}
+                    <tr>
+                      <td>{concept.conceptName}</td>
+                      <td>
+                        <span class="concept-value {concept.value ? 'true' : 'false'}">
+                          {concept.value ? 'True' : 'False'}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="concept-active {concept.isActive ? 'active' : 'inactive'}">
+                          {concept.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <p>No concepts were inherited from parent scenarios.</p>
+          {/if}
+        </div>
+        
+        <div class="summary-actions">
+          <button class="action-btn primary" on:click={closeAppliedConceptsSummary}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
   .concept-test-manager {
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    height: 100%;
-    overflow: hidden;
+    position: relative;
   }
   
-  .test-manager-container {
+  .manager-header {
     display: flex;
-    gap: 1rem;
-    height: 100%;
-    min-height: 700px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .manager-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #333;
+  }
+  
+  .header-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .scenario-selection {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .scenario-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .scenario-select label {
+    font-weight: 500;
+    color: #333;
+  }
+  
+  .scenario-select select {
+    padding: 0.5rem;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    min-width: 200px;
+  }
+  
+  .scenario-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .action-btn {
+    padding: 0.5rem 1rem;
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .action-btn:hover {
+    background-color: #e0e0e0;
+  }
+  
+  .action-btn.active {
+    background-color: #e3f2fd;
+    border-color: #2196f3;
+    color: #0d47a1;
+  }
+  
+  .action-btn.primary {
+    background-color: #2196f3;
+    color: white;
+    border-color: #1976d2;
+  }
+  
+  .action-btn.primary:hover {
+    background-color: #1976d2;
+  }
+  
+  .scenario-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
   
-  .test-scenarios-panel,
-  .test-paths-panel,
-  .test-details-panel {
-    flex: 1;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+  .scenario-info {
     padding: 1rem;
-    overflow-y: auto;
     background-color: #f9f9f9;
-    min-width: 250px;
-    max-height: 700px;
+    border-bottom: 1px solid #e0e0e0;
   }
   
-  .test-details-panel {
-    flex: 2;
-    min-width: 400px;
-  }
-  
-  h2, h3, h4, h5, h6 {
+  .scenario-info h3 {
     margin-top: 0;
     margin-bottom: 0.5rem;
+    color: #333;
   }
   
-  ul, ol {
-    padding-left: 1.5rem;
+  .scenario-info p {
+    margin: 0;
+    margin-bottom: 1rem;
+    color: #666;
   }
   
-  .scenario-list, .path-list {
-    max-height: 300px;
-    overflow-y: auto;
-    border: 1px solid #ddd;
+  .scenario-primary-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .scenario-manager {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem;
+  }
+  
+  .selected-subscenario-actions {
+    padding: 1rem;
+    background-color: #f0f0f0;
+    border-top: 1px solid #e0e0e0;
+  }
+  
+  .action-panel {
+    background-color: white;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
+    padding: 1rem;
+  }
+  
+  .action-panel h4 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #333;
+    font-size: 1rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+  }
+  
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    background-color: #f9f9f9;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    margin: 1rem;
+    color: #999;
+    font-style: italic;
+  }
+  
+  .form-panel {
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .form-panel h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+  }
+  
+  .form-group {
     margin-bottom: 1rem;
   }
   
-  .scenario-list ul, .path-list ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  
-  .scenario-list li, .path-list li {
+  .form-group label {
+    display: block;
     margin-bottom: 0.25rem;
+    font-weight: 500;
+    color: #333;
   }
   
-  .scenario-list button, .path-list button {
-    width: 100%;
-    text-align: left;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    background-color: white;
-    cursor: pointer;
-  }
-  
-  .scenario-list li.selected button, .path-list li.selected button {
-    background-color: #e6f7ff;
-    border-color: #1890ff;
-  }
-  
-  input, textarea, select {
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
     width: 100%;
     padding: 0.5rem;
-    margin-bottom: 0.5rem;
-    border: 1px solid #ddd;
+    border: 1px solid #d9d9d9;
     border-radius: 4px;
   }
   
-  textarea {
-    min-height: 80px;
+  .form-group textarea {
+    min-height: 100px;
+    resize: vertical;
   }
   
-  button {
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  
+  .cancel-btn {
     padding: 0.5rem 1rem;
-    background-color: #1890ff;
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .cancel-btn:hover {
+    background-color: #e0e0e0;
+  }
+  
+  .submit-btn {
+    padding: 0.5rem 1rem;
+    background-color: #2196f3;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    margin-top: 0.5rem;
+    transition: all 0.2s ease;
   }
   
-  button:hover {
-    background-color: #40a9ff;
+  .submit-btn:hover {
+    background-color: #1976d2;
   }
   
-  button:disabled {
-    background-color: #d9d9d9;
-    cursor: not-allowed;
+  .toggle-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
   }
   
-  .save-button {
-    margin-top: 1rem;
-    width: 100%;
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
   
-  .defaults-section {
-    margin-top: 1rem;
-    border-top: 1px solid #ddd;
-    padding-top: 1rem;
+  .toggle-switch label {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    background-color: #ccc;
+    border-radius: 20px;
+    transition: .4s;
+    cursor: pointer;
   }
   
-  .defaults-button {
-    width: 100%;
-    background-color: #722ed1;
+  .toggle-switch label:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    border-radius: 50%;
+    transition: .4s;
   }
   
-  .defaults-button:hover {
-    background-color: #9254de;
+  .toggle-switch input:checked + label {
+    background-color: #2196F3;
   }
   
-  .defaults-selector {
-    margin-top: 1rem;
+  .toggle-switch input:checked + label:before {
+    transform: translateX(20px);
   }
   
-  .defaults-info {
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-    color: #666;
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
   }
   
-  .defaults-container {
-    height: 400px;
-    border: 1px solid #ddd;
+  .modal-content {
+    width: 80%;
+    max-width: 1000px;
+    height: 80%;
+    max-height: 800px;
+    background-color: white;
     border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     overflow: hidden;
   }
   
-  .execute-button {
-    background-color: #52c41a;
-  }
-  
-  .execute-button:hover {
-    background-color: #73d13d;
-  }
-  
-  .clear-button {
-    background-color: #ff4d4f;
-  }
-  
-  .clear-button:hover {
-    background-color: #ff7875;
-  }
-  
-  .visualization-toggle {
+  .empty-scenarios {
     display: flex;
-    margin-bottom: 1rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    background-color: #f9f9f9;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    margin: 1rem;
+    text-align: center;
   }
   
-  .visualization-toggle button {
-    flex: 1;
-    margin-top: 0;
+  .empty-scenarios p {
+    margin-bottom: 1.5rem;
+    color: #666;
+    font-style: italic;
+  }
+  
+  .add-first-scenario-btn {
+    padding: 0.75rem 1.5rem;
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .add-first-scenario-btn:hover {
+    background-color: #1976d2;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .summary-modal {
+    width: 600px;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+  }
+  
+  .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
     background-color: #f0f0f0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .summary-header h3 {
+    margin: 0;
     color: #333;
   }
   
-  .visualization-toggle button.active {
-    background-color: #1890ff;
-    color: white;
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
   }
   
-  .concept-selection-container {
-    margin-bottom: 1rem;
+  .summary-content {
+    padding: 1rem;
+    overflow-y: auto;
+    max-height: 400px;
   }
   
-  .concept-selection {
-    height: 450px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 1rem;
-  }
-  
-  .test-results {
+  .inherited-concepts-summary {
     margin-top: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 1rem;
     background-color: #f9f9f9;
-  }
-  
-  .test-result {
-    margin-bottom: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
     padding: 1rem;
-    border-radius: 4px;
   }
   
-  .test-result.success {
-    background-color: #f6ffed;
-    border: 1px solid #b7eb8f;
+  .inherited-concepts-summary h4 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: #333;
   }
   
-  .test-result.failure {
-    background-color: #fff2f0;
-    border: 1px solid #ffccc7;
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
   }
   
-  .failure-reason {
-    color: #f5222d;
-    font-weight: bold;
-  }
-  
-  .step-result {
-    margin: 0.5rem 0;
+  .summary-table th,
+  .summary-table td {
     padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .summary-table th {
+    background-color: #f0f0f0;
+    font-weight: 500;
+  }
+  
+  .concept-value,
+  .concept-active {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
     border-radius: 4px;
+    font-size: 0.8rem;
   }
   
-  .step-result.success {
-    background-color: #f6ffed;
+  .concept-value.true {
+    background-color: #e8f5e9;
+    color: #2e7d32;
   }
   
-  .step-result.failure {
-    background-color: #fff2f0;
+  .concept-value.false {
+    background-color: #ffebee;
+    color: #c62828;
   }
   
-  .result-details {
-    margin-left: 1rem;
+  .concept-active.active {
+    background-color: #e3f2fd;
+    color: #0d47a1;
   }
   
-  .result-outcomes li.success {
-    color: #52c41a;
+  .concept-active.inactive {
+    background-color: #f5f5f5;
+    color: #757575;
   }
   
-  .result-outcomes li.failure {
-    color: #f5222d;
-  }
-  
-  .concept-states, .result-outcomes {
-    margin-bottom: 1rem;
-  }
-  
-  @media (max-width: 1200px) {
-    .test-manager-container {
-      flex-direction: column;
-    }
-    
-    .test-scenarios-panel,
-    .test-paths-panel,
-    .test-details-panel {
-      max-height: none;
-      width: 100%;
-    }
+  .summary-actions {
+    padding: 1rem;
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid #e0e0e0;
   }
 </style> 

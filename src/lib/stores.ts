@@ -1,6 +1,5 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import type { Concept, Config, TestCase } from './types';
-import type { Tab } from '$lib/types';
 
 export const config = writable<Config | null>(null);
 export const concepts = writable<Record<string, Concept>>({});
@@ -9,10 +8,135 @@ export const debugMode = writable<boolean>(false);
 export const testCases = writable<TestCase[]>([]);
 export const selectedTestCase = writable<string>('');
 
-// Helper function to evaluate concept expressions
+// Interface for evaluation steps
+export interface EvaluationStep {
+    expression: string;
+    result: boolean | null;
+    explanation: string;
+    isSubExpression?: boolean;
+    conceptName?: string;
+    conceptValue?: boolean;
+}
+
+// Helper function to evaluate concept expressions with detailed steps
+export function evaluateConceptExpressionWithSteps(expression: string): { result: boolean, steps: EvaluationStep[] } {
+    const steps: EvaluationStep[] = [];
+    const conceptsSnapshot = get(concepts);
+    
+    // Add the initial step with the original expression
+    steps.push({
+        expression,
+        result: null,
+        explanation: 'Starting with the original expression'
+    });
+    
+    // First, handle the "[%" and "%]" delimiters
+    let processedExpression = expression;
+    
+    // Replace "[%" and "%]" with empty strings
+    if (processedExpression.includes('[%') && processedExpression.includes('%]')) {
+        processedExpression = processedExpression.replace(/\[%/g, '').replace(/%\]/g, '');
+        
+        steps.push({
+            expression: processedExpression,
+            result: null,
+            explanation: 'Removed "[%" and "%]" delimiters'
+        });
+    }
+    
+    // Replace English operators with JavaScript operators
+    const operatorReplacements = [
+        { from: /\bAND\b/g, to: '&&', explanation: 'Replaced "AND" with "&&"' },
+        { from: /\bOR\b/g, to: '||', explanation: 'Replaced "OR" with "||"' },
+        { from: /\bNOT\b/g, to: '!', explanation: 'Replaced "NOT" with "!"' }
+    ];
+    
+    let operatorsReplaced = false;
+    let operatorExplanation = 'Replaced English operators with JavaScript operators:';
+    
+    for (const replacement of operatorReplacements) {
+        if (replacement.from.test(processedExpression)) {
+            processedExpression = processedExpression.replace(replacement.from, replacement.to);
+            operatorsReplaced = true;
+            operatorExplanation += ` ${replacement.explanation};`;
+        }
+    }
+    
+    if (operatorsReplaced) {
+        steps.push({
+            expression: processedExpression,
+            result: null,
+            explanation: operatorExplanation
+        });
+    }
+    
+    // Extract concept references from the expression
+    const conceptRegex = /\{([^{}]+)\}/g;
+    let modifiedExpression = processedExpression;
+    let match;
+    
+    // Replace all concept references with their values
+    while ((match = conceptRegex.exec(processedExpression)) !== null) {
+        const conceptName = match[1].trim();
+        const conceptValue = conceptsSnapshot[conceptName]?.value ?? false;
+        const isActive = conceptsSnapshot[conceptName]?.isActive ?? false;
+        
+        // If concept is not active, its value is considered false
+        const effectiveValue = isActive ? conceptValue : false;
+        
+        // Add a step for each concept substitution
+        steps.push({
+            expression: `{${conceptName}}`,
+            result: effectiveValue,
+            explanation: `Substituting concept "${conceptName}" with its value: ${effectiveValue}`,
+            isSubExpression: true,
+            conceptName,
+            conceptValue: effectiveValue
+        });
+        
+        // Replace the concept reference with its boolean value in the expression
+        modifiedExpression = modifiedExpression.replace(`{${conceptName}}`, effectiveValue.toString());
+    }
+    
+    // Add a step with all concepts replaced by their values
+    if (modifiedExpression !== processedExpression) {
+        steps.push({
+            expression: modifiedExpression,
+            result: null,
+            explanation: 'Expression with all concepts replaced by their values'
+        });
+    }
+    
+    // Evaluate the expression safely
+    let result: boolean;
+    try {
+        // Use Function constructor to evaluate the expression
+        // This is safe as we're only evaluating boolean expressions
+        result = new Function(`return ${modifiedExpression}`)() === true;
+        
+        // Add the final evaluation step
+        steps.push({
+            expression: modifiedExpression,
+            result,
+            explanation: `Final evaluation result: ${result}`
+        });
+    } catch (error) {
+        // If there's an error, add it as a step
+        steps.push({
+            expression: modifiedExpression,
+            result: false,
+            explanation: `Error evaluating expression: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+        result = false;
+    }
+    
+    return { result, steps };
+}
+
+// Helper function to evaluate concept expressions (simplified version)
 export function evaluateConceptExpression(expression: string): boolean {
-    // This is a placeholder - we'll implement the actual evaluation logic later
-    return true;
+    const { result } = evaluateConceptExpressionWithSteps(expression);
+    return result;
 }
 
 // Helper function to set concept value

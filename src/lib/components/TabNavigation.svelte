@@ -1,46 +1,55 @@
 <script lang="ts">
-    import { config, selectedTab } from '$lib/stores';
+    import type { Tab } from '../types';
+    import { configStore } from '../services/configService';
+
+    export let selectedTab: Tab;
+    export let onTabChange: (tab: Tab) => void;
+
+    $: tabs = $configStore?.RCONFIG.TABS || [];
 </script>
 
-<div class="border-b border-gray-200">
-    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-        {#each $config.tabs as tab}
+<nav class="clinical-tabs bg-gray-100 border-b-2 border-clinical-blue">
+    <div class="tabs-container flex" role="tablist">
+        {#each tabs as tab}
             <button
-                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                    {$selectedTab === tab.id
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-                on:click={() => selectedTab.set(tab.id)}
+                role="tab"
+                aria-selected={selectedTab === tab.TAB_KEY}
+                class="tab-button {selectedTab === tab.TAB_KEY ? 'active' : ''} px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-clinical-blue focus:ring-opacity-50"
+                on:click={() => onTabChange(tab.TAB_KEY)}
             >
-                {tab.name}
+                {tab.TAB_NAME}
             </button>
         {/each}
-    </nav>
-</div>
+    </div>
+</nav>
 
 <style>
-    .tab-navigation {
-        display: flex;
-        gap: 0.5rem;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #ddd;
+    .clinical-tabs {
+        background-color: var(--color-gray-100);
     }
 
     .tab-button {
-        padding: 0.5rem 1rem;
-        border: none;
+        background-color: #e0e0e0;
+        border: 1px solid #ccc;
+        border-bottom: none;
         border-radius: 4px 4px 0 0;
-        background-color: #f0f0f0;
+        margin-right: 2px;
+        margin-bottom: -1px;
+        color: #333;
         cursor: pointer;
-        transition: all 0.2s;
+        font-family: var(--font-sans);
+        position: relative;
+        top: 1px;
     }
 
     .tab-button:hover {
-        background-color: #e0e0e0;
+        background-color: #d0d0d0;
     }
 
     .tab-button.active {
-        background-color: #3498db;
+        background-color: var(--color-clinical-blue, #0056b3);
         color: white;
+        border-color: var(--color-clinical-blue, #0056b3);
+        font-weight: bold;
     }
 </style> 

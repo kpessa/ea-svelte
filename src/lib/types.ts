@@ -1,6 +1,7 @@
 export interface Concept {
     value: boolean;
     isActive: boolean;
+    description?: string;
 }
 
 export interface TestCase {
@@ -38,6 +39,9 @@ export interface TabConfig {
     CRITERIA: Criterion[];
     ORDER_SECTIONS: OrderSection[];
     RESOURCES?: Resource[];
+    FLAG_ON_CONCEPT?: string;
+    CONCEPT_FOR_DISMISS?: string;
+    CONCEPTS?: ConceptItem[];
 }
 
 export interface Criterion {
@@ -89,4 +93,88 @@ export interface GraphedResult {
     LOOKBACK: string;
     MAX_RESULT_COUNT: string;
     RESULTS_VIEW: ResultsView;
+}
+
+export interface ConceptItem {
+    Concept: string;
+}
+
+export interface ConceptReference {
+    name: string;
+    section: string;
+    path: string;
+    isExpression: boolean;
+}
+
+// Test Framework Types
+export interface TestScenario {
+    id: string;
+    name: string;
+    description: string;
+    scenarios: TestSubScenario[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface TestSubScenario {
+    id: string;
+    name: string;
+    description: string;
+    parentId: string | null;
+    level: number;
+    concepts: ConceptChange[];
+    children: TestSubScenario[];
+    expectedResults: ExpectedResult[];
+}
+
+export interface TestPath {
+    id: string;
+    name: string;
+    description: string;
+    steps: TestStep[];
+    expectedResults: ExpectedResult[];
+    parentId?: string | null;
+}
+
+export interface TestStep {
+    id: string;
+    name: string;
+    conceptChanges: ConceptChange[];
+    order: number;
+}
+
+export interface ConceptChange {
+    conceptName: string;
+    value: boolean;
+    isActive: boolean;
+    inherited?: boolean;
+}
+
+export interface ExpectedResult {
+    type: 'tab' | 'section' | 'order' | 'criterion';
+    target: string;
+    expectedVisibility: boolean;
+    description: string;
+}
+
+export interface TestResult {
+    scenarioId: string;
+    pathId: string;
+    timestamp: string;
+    steps: TestStepResult[];
+    success: boolean;
+    failureReason?: string;
+}
+
+export interface TestStepResult {
+    stepId: string;
+    conceptStates: Record<string, Concept>;
+    results: ExpectedResultOutcome[];
+    success: boolean;
+}
+
+export interface ExpectedResultOutcome {
+    expectedResult: ExpectedResult;
+    actualVisibility: boolean;
+    success: boolean;
 } 

@@ -51,3 +51,29 @@
 - Include relevant context in commit messages
 - Review changes before committing
 - Commit frequently with meaningful changes
+
+# Project Configuration
+- Using Svelte 5 with TypeScript for modern, type-safe web development
+- Vite as the build tool for fast development and optimized production builds
+- Tailwind CSS for utility-first styling
+- CodeMirror for JSON configuration editing
+- Using the existing @config.json as the base configuration template for the application
+- All new configuration changes should follow the structure and naming conventions established in @config.json
+
+# Code Organization
+- Components in src/lib/components/
+- Services in src/lib/services/
+- Types in src/lib/types.ts
+- Configuration in src/config/
+
+# Development Guidelines
+- Use TypeScript for type safety
+- Follow Svelte 5 best practices
+- Implement responsive design using Tailwind's responsive prefixes
+- Keep custom CSS minimal, prefer Tailwind utilities
+- Maintain compatibility with the existing @config.json structure when making changes
+
+# State Management
+- Use Svelte stores for global state
+- Config state managed through configStore
+- Reactive updates for configuration changes

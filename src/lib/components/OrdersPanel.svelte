@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { Tab, OrderSection } from '../types';
     import { configStore } from '../services/configService';
-    import { evaluateConceptExpression, evaluateConceptExpressionWithSteps, type EvaluationStep } from '../stores';
+    import { evaluateConceptExpression, evaluateConceptExpressionWithSteps, type EvaluationStep, concepts } from '../stores';
     import ConceptStatusIndicator from './ConceptStatusIndicator.svelte';
     import { onMount } from 'svelte';
     import { EditorView, basicSetup } from 'codemirror';
@@ -52,6 +52,26 @@
         }
     });
 
+    // Listen for concept changes and automatically evaluate sections
+    onMount(() => {
+        // Add event listener for concept changes
+        const handleConceptsApplied = (event: CustomEvent) => {
+            evaluateOrderSections();
+        };
+        
+        document.addEventListener('concepts-applied', handleConceptsApplied as EventListener);
+        
+        // Add listener for the evaluate-order-sections event
+        document.addEventListener('evaluate-order-sections', (() => {
+            evaluateOrderSections();
+        }) as EventListener);
+        
+        return () => {
+            document.removeEventListener('concepts-applied', handleConceptsApplied as EventListener);
+            document.removeEventListener('evaluate-order-sections', (evaluateOrderSections as unknown) as EventListener);
+        };
+    });
+
     function toggleSection(sectionIndex: number): void {
         collapsedSections[sectionIndex] = !collapsedSections[sectionIndex];
         collapsedSections = {...collapsedSections}; // Trigger reactivity
@@ -80,23 +100,40 @@
         showEvaluationModal = false;
     }
     
-    // Filter sections based on concept expressions
+    // Evaluate order sections based on concept expressions
     function evaluateOrderSections() {
+        if (!currentTab) {
+            return;
+        }
+        
+        // Enable filtering
         filteringEnabled = true;
+        
+        // Get sections from the current tab
+        const sections = currentTab.ORDER_SECTIONS || [];
+        
+        // Reset filtered sections
+        filteredSections = {};
         hiddenSectionCount = 0;
         
         // Evaluate each section's concept expression
-        orderSections.forEach((section, index) => {
-            const isVisible = evaluateSectionExpression(section.CONCEPT_NAME);
-            filteredSections[index] = isVisible;
-            
-            if (!isVisible) {
-                hiddenSectionCount++;
+        sections.forEach((section: OrderSection, index: number) => {
+            if (section.CONCEPT_NAME) {
+                try {
+                    const result = evaluateSectionExpression(section.CONCEPT_NAME);
+                    filteredSections[index] = result;
+                    
+                    if (!result) {
+                        hiddenSectionCount++;
+                    }
+                } catch (error) {
+                    filteredSections[index] = false;
+                    hiddenSectionCount++;
+                }
+            } else {
+                filteredSections[index] = true;
             }
         });
-        
-        // Force reactivity
-        filteredSections = {...filteredSections};
     }
     
     // Show all sections
@@ -225,6 +262,15 @@
                         ({hiddenSectionCount} section{hiddenSectionCount !== 1 ? 's' : ''} hidden)
                     </span>
                 {/if}
+            {/if}
+            {#if debugMode}
+                <button 
+                    class="filter-btn debug-btn" 
+                    on:click={() => console.log('Current concepts store:', $concepts)}
+                    title="Log current concepts to console"
+                >
+                    Log Concepts
+                </button>
             {/if}
         </div>
     </div>
