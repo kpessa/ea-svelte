@@ -10,6 +10,9 @@ A clinical decision support tool that assists healthcare providers in managing p
 - Concept Management: View and modify the state of "concepts" (variables that control application behavior)
 - Configuration Editor: Edit the JSON configuration that controls the application's behavior
 - Debug Mode: Show additional information about concept expressions and their evaluation results
+- Enhanced Expression Evaluator: Step-by-step evaluation of concept expressions with syntax highlighting
+- Interactive Concept Toggling: Click on concepts within expressions to toggle their values
+- Expression Debugging: Evaluate expressions with detailed step-by-step breakdown of the evaluation process
 
 ## Getting Started
 

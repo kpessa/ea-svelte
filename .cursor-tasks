@@ -52,6 +52,57 @@
 - [x] Create concept validation system
 - [x] Implement concept persistence
 
+## Story 5b: Concept Extraction
+- [x] Create concept extraction service
+- [x] Implement concept reference tracking
+- [x] Add concept usage reporting
+- [x] Connect extraction to config changes
+- [x] Add extraction UI to Concept Manager
+
+## Story 5c: Concept Test Framework
+- [x] Create test scenario model
+- [x] Implement test path visualization
+- [x] Add concept-based test case generation
+- [x] Create test execution engine
+- [x] Implement test results reporting
+- [x] Add regression testing capabilities
+
+## Story 5d: Enhanced Concept Selection
+- [x] Group concepts by tab and section
+- [x] Create hierarchical concept selector
+- [x] Implement concept toggle interface
+- [x] Add value input for applicable concepts
+- [x] Connect extraction results to test framework
+- [x] Default new path nodes to selected concept values
+
+## Story 5e: Enhanced Concept Evaluation and Integration
+- [x] Redesign Concept Manager with hierarchical concept view
+- [x] Increase Concept Manager window size for better usability
+- [x] Add integration between Concept Manager and Test Framework
+- [x] Implement ability to assign concept states to test scenarios
+- [x] Enhance concept evaluation visualization
+- [x] Add concept-based section rendering control
+
+## Story 5f: Enhanced Concept Expression Evaluator
+- [x] Implement step-by-step evaluation process for concept expressions
+- [x] Add support for "[%" and "%]" delimiters in expressions
+- [x] Translate English logical operators (AND, OR, NOT) to JavaScript operators
+- [x] Create syntax highlighting for concepts, operators, and delimiters
+- [x] Implement ability to toggle concepts by clicking on them in expressions
+- [x] Add debug mode button for evaluating expressions in order sections
+- [x] Create evaluation modal to display step-by-step evaluation results
+- [x] Enhance visual presentation of evaluation steps for better clarity
+
+## Story 5g: Concept Visibility and Order Section Filtering
+- [x] Add visual indicator showing active concept count in the UI
+- [x] Create concept status summary component
+- [x] Implement "Evaluate Order Sections" button to filter sections
+- [x] Add logic to show only order sections with true concept expressions
+- [x] Create "Show All Orders" button to reset section visibility
+- [x] Add visual feedback when sections are filtered
+- [x] Ensure filtering state persists across tab changes
+- [x] Implement smooth transitions for section visibility changes
+
 ## Story 6: Styling and Polish
 - [ ] Set up base styling system
 - [ ] Create component-specific styles
