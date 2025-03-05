@@ -103,6 +103,32 @@
 - [x] Ensure filtering state persists across tab changes
 - [x] Implement smooth transitions for section visibility changes
 
+## Story 5h: Enhanced Test Path Graph Visualization
+- [ ] Make graph view the top-level visualization for test scenarios
+- [ ] Implement ability to define decision points and options
+- [ ] Add feature to build graph based on defined decisions
+- [ ] Create interactive node editing with add/remove functionality
+- [ ] Implement "Add Descendant" button on nodes to extend paths horizontally
+- [ ] Add concept inheritance visualization between connected nodes
+- [ ] Enhance node styling to show active concepts within each node
+- [ ] Implement drag-and-drop functionality for rearranging nodes
+- [ ] Add zoom and pan controls for navigating large graphs
+- [ ] Create export/import functionality for graph structures
+
+## Story 5i: Hierarchical Test Path Management
+- [x] Implement hierarchical indented list view for test paths
+- [x] Add parent-child relationship between test paths
+- [ ] Create functionality to create a new test scenario from scratch
+- [ ] Implement ability to add the first test path with initial concepts
+- [ ] Add visual indicators for path depth in list view
+- [ ] Create collapsible/expandable path groups in list view
+- [ ] Implement inheritance of concepts from parent paths to child paths
+- [ ] Add ability to override inherited concepts in child paths
+- [ ] Create breadcrumb navigation for deep path hierarchies
+- [ ] Implement path cloning with modifications for branch creation
+- [ ] Add batch operations for multiple paths (delete, move, apply concepts)
+- [ ] Create path comparison view to highlight differences between paths
+
 ## Story 6: Styling and Polish
 - [ ] Set up base styling system
 - [ ] Create component-specific styles
