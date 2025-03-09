@@ -61,7 +61,11 @@
 
 {#if value !== undefined && isActive !== undefined && conceptName}
   <!-- Individual concept status indicator -->
-  <div class="concept-status {statusClass}" title="{isActive ? (value ? 'Active: True' : 'Active: False') : 'Inactive'}">
+  <div 
+    class="concept-status {statusClass}" 
+    role="status"
+    aria-label="Concept status: {isActive ? (value ? 'Active and True' : 'Active and False') : 'Inactive'}"
+  >
     {#if isActive}
       {value ? '✓' : '✗'}
     {:else}
@@ -72,8 +76,18 @@
   <!-- Global concept status indicator -->
   <div 
     class="concept-status-indicator"
+    role="button"
+    tabindex="0"
+    aria-expanded={showTooltip}
+    aria-label="Concept status indicator: {activeConceptCount} active out of {totalConceptCount} total concepts"
     on:mouseenter={() => showTooltip = true}
     on:mouseleave={() => showTooltip = false}
+    on:keydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        showTooltip = !showTooltip;
+        e.preventDefault();
+      }
+    }}
   >
     <div class="indicator-content">
       <div class="concept-count">
@@ -85,12 +99,13 @@
         <span class="total-label">total</span>
       </div>
     </div>
-    <div class="indicator-icon" title="Active Concepts: {activeConceptCount} / {totalConceptCount}">
-      🧠
-    </div>
+    <div class="indicator-icon">🧠</div>
 
     {#if showTooltip && activeConceptsList.length > 0}
-      <div class="concepts-tooltip">
+      <div 
+        class="concepts-tooltip"
+        role="tooltip"
+      >
         <h4>Active Concepts ({activeConceptsList.length})</h4>
         <div class="concepts-list">
           {#each activeConceptsList as concept}

@@ -20,6 +20,11 @@
     let editorContent: string = '';
     let jsonError: string | null = null;
 
+    function handleSelectChange(event: Event) {
+        const select = event.target as HTMLSelectElement;
+        loadConfig(select.value);
+    }
+
     const jsonLinter = linter((view) => {
         try {
             JSON.parse(view.state.doc.toString());
@@ -179,10 +184,7 @@
                         <select 
                             class="px-2 py-1 border rounded text-sm"
                             value={$currentConfigName}
-                            on:change={(e) => {
-                                const select = e.target as HTMLSelectElement;
-                                loadConfig(select.value);
-                            }}
+                            on:change={handleSelectChange}
                         >
                             {#each $availableConfigs as configName}
                                 <option value={configName}>{configName}</option>

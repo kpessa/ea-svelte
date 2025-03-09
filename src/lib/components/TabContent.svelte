@@ -80,6 +80,17 @@
             contentGrid.style.gridTemplateColumns = `${containerWidth}px 1fr`;
         }
     }
+
+    function handleKeyDown(event: KeyboardEvent) {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            const delta = event.key === 'ArrowLeft' ? -10 : 10;
+            const newWidth = Math.max(250, Math.min(1000, containerWidth + delta));
+            containerWidth = newWidth;
+            updateGridTemplateColumns();
+            localStorage.setItem('criteriaContainerWidth', containerWidth.toString());
+            event.preventDefault();
+        }
+    }
 </script>
 
 <div class="tab-content bg-gray-50 rounded-md">
@@ -90,8 +101,12 @@
             <!-- Resizer handle -->
             <div 
                 class="resizer absolute right-0 top-0 bottom-0 w-2 bg-transparent hover:bg-primary-200 hover:opacity-70 cursor-ew-resize z-10 transition-colors duration-150"
+                role="separator"
+                aria-label="Resize panel"
+                tabindex="0"
                 on:mousedown={handleMouseDown}
-                title="Drag to resize"
+                on:keydown={handleKeyDown}
+                title="Drag to resize or use left/right arrow keys"
             ></div>
         </div>
         <div class="orders-container">

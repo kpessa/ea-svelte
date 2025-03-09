@@ -25,16 +25,23 @@ export interface Order {
     COMMENT: string;
 }
 
-export type Tab = 'MAGNESIUM' | 'POTASSIUM' | 'PHOSPHATE';
+export type ElectrolyteTab = 'MAGNESIUM' | 'POTASSIUM' | 'PHOSPHATE';
 
 export interface Config {
     RCONFIG: {
-        TABS: TabConfig[];
+        TABS: NavigationTab[];
+        SETTINGS: {
+            theme: string;
+            language: string;
+            [key: string]: any;
+        };
+        [key: string]: any;
     };
+    [key: string]: any;
 }
 
 export interface TabConfig {
-    TAB_KEY: Tab;
+    TAB_KEY: ElectrolyteTab;
     TAB_NAME: string;
     CRITERIA: Criterion[];
     ORDER_SECTIONS: OrderSection[];
@@ -177,4 +184,30 @@ export interface ExpectedResultOutcome {
     expectedResult: ExpectedResult;
     actualVisibility: boolean;
     success: boolean;
-} 
+}
+
+// Navigation types
+export interface NavItem {
+    label: string;
+    href: string;
+}
+
+// Tab types
+export interface NavigationTab {
+    TAB_KEY: string;
+    TAB_NAME: string;
+}
+
+// Patient types
+export interface Patient {
+    id: string;
+    name: string;
+    dob: string;
+    mrn: string;
+    sex: string;
+    age: number;
+    room: string;
+}
+
+// Concept Status type
+export type ConceptStatus = 'active' | 'inactive' | 'pending' | 'error'; 

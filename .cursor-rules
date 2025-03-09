@@ -1,3 +1,13 @@
+Hi Cursor AI! We're developing a complex Svelte application, and I need your help to ensure our code is top-notch. Here are some guidelines:
+
+- **Framework**: Svelte. Please follow Svelte's syntax and best practices, including proper use of reactivity, stores, and component composition.
+- **Complexity vs. Simplicity**: The app is intricate, so while I value simple and clean code, ensure that solutions are comprehensive and fit the project's complexity.
+- **Data Mocking**: Do not mock data in the main codebase; reserve mocking for tests and Storybook stories.
+- **Refactoring**: If a component exceeds roughly 200-300 lines or becomes hard to maintain, suggest refactoring it into smaller, more focused components.
+- **Clarifications**: If you're unsure about any requirements or need more context, feel free to ask for clarification.
+
+Let's collaborate to make this app both powerful and maintainable!
+
 # Design Rules and Dependencies
 
 ## Framework and Core Dependencies

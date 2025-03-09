@@ -1018,8 +1018,8 @@
             <div class="highlighted-expression" 
               on:click={(e) => {
                 // Check if the clicked element is a concept
-                const target = e.target as HTMLElement;
-                if (target.classList.contains('concept-highlight')) {
+                const target = e.currentTarget;
+                if (target instanceof HTMLElement && target.classList.contains('concept-highlight')) {
                   const conceptName = target.getAttribute('data-concept');
                   if (conceptName) {
                     toggleConcept(conceptName);
