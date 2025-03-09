@@ -2,7 +2,7 @@
     import type { Tab, OrderSection } from '../types';
     import { configStore } from '../services/configService';
     import { evaluateConceptExpression, evaluateConceptExpressionWithSteps, type EvaluationStep, concepts } from '../stores';
-    import ConceptStatusIndicator from './ConceptStatusIndicator.svelte';
+    import GlobalConceptIndicator from './GlobalConceptIndicator.svelte';
     import { onMount } from 'svelte';
     import { EditorView, basicSetup } from 'codemirror';
     import { json } from '@codemirror/lang-json';
@@ -236,10 +236,10 @@
     }
 </script>
 
-<div class="clinical-orders-panel">
-    <div class="orders-panel-header">
+<div class="clinical-orders-panel h-full flex flex-col">
+    <div class="orders-panel-header flex-none">
         <div class="concept-status">
-            <ConceptStatusIndicator />
+            <GlobalConceptIndicator />
         </div>
         <div class="filter-controls">
             <button 
@@ -276,7 +276,7 @@
     </div>
 
     {#if orderSections.length > 0}
-        <div class="order-sections">
+        <div class="order-sections flex-1 overflow-auto">
             {#each orderSections as section, sectionIndex}
                 {#if shouldShowSection(section.CONCEPT_NAME, sectionIndex)}
                     <div class="order-section" class:collapsed={collapsedSections[sectionIndex]}>
@@ -391,7 +391,7 @@
             {/each}
         </div>
     {:else}
-        <div class="no-sections">
+        <div class="no-sections flex-1">
             No order sections available
         </div>
     {/if}
@@ -445,10 +445,7 @@
     .clinical-orders-panel {
         font-family: Arial, sans-serif;
         color: #333;
-        height: 100%;
-        overflow: auto;
-        display: flex;
-        flex-direction: column;
+        background-color: white;
     }
     
     .orders-panel-header {
@@ -458,7 +455,6 @@
         padding: 10px;
         background-color: #f8f9fa;
         border-bottom: 1px solid #e9ecef;
-        margin-bottom: 15px;
     }
     
     .concept-status {
@@ -1227,8 +1223,6 @@
 
     .order-sections {
         padding: 0 5px;
-        overflow: auto;
-        flex: 1;
     }
 
     /* Add styles to properly handle HTML content in section titles */

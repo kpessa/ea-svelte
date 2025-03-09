@@ -93,9 +93,9 @@
     }
 </script>
 
-<div class="tab-content bg-gray-50 rounded-md">
-    <div class="content-grid flex-col lg:flex-row" bind:this={contentGrid}>
-        <div class="criteria-container relative" bind:this={criteriaContainer}>
+<div class="tab-content bg-gray-50 rounded-md h-full overflow-hidden">
+    <div class="content-grid h-full" bind:this={contentGrid}>
+        <div class="criteria-container relative h-full overflow-hidden" bind:this={criteriaContainer}>
             <CriteriaPanel {selectedTab} {debugMode} />
             
             <!-- Resizer handle -->
@@ -109,16 +109,21 @@
                 title="Drag to resize or use left/right arrow keys"
             ></div>
         </div>
-        <div class="orders-container">
+        <div class="orders-container h-full overflow-hidden">
             <OrdersPanel {selectedTab} {debugMode} />
         </div>
     </div>
 </div>
 
 <style>
+    .tab-content {
+        display: flex;
+        flex-direction: column;
+    }
+
     .content-grid {
         display: grid;
-        grid-template-columns: 350px 1fr; /* Updated from 300px to 350px */
+        grid-template-columns: 350px 1fr;
         gap: 1rem;
     }
     

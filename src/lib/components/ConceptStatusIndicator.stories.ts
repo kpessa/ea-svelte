@@ -15,6 +15,9 @@ const meta = {
     title: 'Components/ConceptStatusIndicator',
     component: ConceptStatusIndicator,
     tags: ['autodocs'],
+    parameters: {
+        layout: 'centered',
+    },
     argTypes: {
         value: {
             control: 'boolean',
@@ -31,7 +34,6 @@ const meta = {
     },
     decorators: [
         (story) => {
-            // Set up the concepts store with mock data
             concepts.set(mockConcepts);
             return story();
         }
@@ -41,7 +43,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Individual concept indicator stories
 export const ActiveTrue: Story = {
     args: {
         value: true,
@@ -64,30 +65,4 @@ export const Inactive: Story = {
         isActive: false,
         conceptName: 'NA_LOW'
     }
-};
-
-// Global concept indicator story
-export const GlobalIndicator: Story = {
-    args: {}
-};
-
-export const WithManyActiveConcepts: Story = {
-    decorators: [
-        (story) => {
-            // Set up the concepts store with more mock data
-            concepts.set({
-                'K_LOW': { value: true, isActive: true },
-                'K_HIGH': { value: false, isActive: true },
-                'MG_LOW': { value: true, isActive: true },
-                'MG_HIGH': { value: false, isActive: true },
-                'NA_LOW': { value: true, isActive: true },
-                'NA_HIGH': { value: false, isActive: true },
-                'CA_LOW': { value: true, isActive: false },
-                'CA_HIGH': { value: false, isActive: false },
-                'PO4_LOW': { value: true, isActive: true }
-            });
-            return story();
-        }
-    ],
-    args: {}
 }; 
