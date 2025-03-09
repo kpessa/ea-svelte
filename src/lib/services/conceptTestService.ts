@@ -578,4 +578,57 @@ export class ConceptTestService {
     
     return success;
   }
+  
+  /**
+   * Add a step to a path in a scenario
+   * @param scenarioId The ID of the scenario
+   * @param pathId The ID of the path
+   * @param stepName The name of the step
+   * @param conceptChanges The concept changes for the step
+   * @returns boolean indicating success
+   */
+  static addStepToPath(
+    scenarioId: string,
+    pathId: string,
+    stepName: string,
+    conceptChanges: ConceptChange[]
+  ): boolean {
+    const scenarios = get(testScenarios);
+    const scenarioIndex = scenarios.findIndex(s => s.id === scenarioId);
+    
+    if (scenarioIndex === -1) return false;
+    
+    // We need to cast scenario to include the paths property
+    interface ExtendedScenario extends TestScenario {
+      paths: TestPath[];
+    }
+    
+    const scenario = scenarios[scenarioIndex] as unknown as ExtendedScenario;
+    const pathIndex = scenario.paths.findIndex(p => p.id === pathId);
+    
+    if (pathIndex === -1) return false;
+    
+    // Create a new step
+    const newStep: TestStep = {
+      id: uuidv4(),
+      name: stepName,
+      conceptChanges,
+      order: scenario.paths[pathIndex].steps.length
+    };
+    
+    // Add the step to the path
+    testScenarios.update(scenarios => {
+      const updatedScenarios = [...scenarios];
+      const updatedScenario = { ...updatedScenarios[scenarioIndex] } as unknown as ExtendedScenario;
+      const updatedPath = { ...updatedScenario.paths[pathIndex] };
+      
+      updatedPath.steps = [...updatedPath.steps, newStep];
+      updatedScenario.paths[pathIndex] = updatedPath;
+      updatedScenarios[scenarioIndex] = updatedScenario as unknown as TestScenario;
+      
+      return updatedScenarios;
+    });
+    
+    return true;
+  }
 } 

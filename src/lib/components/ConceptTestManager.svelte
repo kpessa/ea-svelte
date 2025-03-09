@@ -2,23 +2,27 @@
   import { onMount } from 'svelte';
   import { ConceptTestService, testScenarios, testResults } from '../services/conceptTestService';
   import { configStore } from '../services/configService';
-  import type { TestScenario, TestSubScenario, ExpectedResult, ConceptChange } from '../types';
+  import type { TestScenario, TestSubScenario, ExpectedResult, ConceptChange, NavigationTab } from '../types';
   import { concepts } from '../stores';
   import ConceptHierarchySelector from './ConceptHierarchySelector.svelte';
   import HierarchicalScenarioManager from './HierarchicalScenarioManager.svelte';
   import ScenarioConceptEditor from './ScenarioConceptEditor.svelte';
+  import ScenarioForm from './ScenarioForm.svelte';
+  import SubScenarioForm from './SubScenarioForm.svelte';
+  import ExpectedResultForm from './ExpectedResultForm.svelte';
+  import ConceptSummaryModal from './ConceptSummaryModal.svelte';
+  import ScenarioActionPanel from './ScenarioActionPanel.svelte';
+  import ScenarioSelector from './ScenarioSelector.svelte';
+  import ManagerHeader from './ManagerHeader.svelte';
+  
+  interface OrderSection {
+    CONCEPT_NAME?: string;
+    // Add other properties as needed
+  }
   
   let scenarios: TestScenario[] = [];
   let selectedScenarioId: string | null = null;
   let selectedSubScenarioId: string | null = null;
-  let newScenarioName = '';
-  let newScenarioDescription = '';
-  let newSubScenarioName = '';
-  let newSubScenarioDescription = '';
-  let newExpectedResultType: 'tab' | 'section' | 'order' | 'criterion' = 'tab';
-  let newExpectedResultTarget = '';
-  let newExpectedResultVisibility = true;
-  let newExpectedResultDescription = '';
   let isEditMode: boolean = false;
   let showCreateScenarioForm = false;
   let showCreateSubScenarioForm = false;
@@ -84,9 +88,8 @@
     }
   }
   
-  function handleScenarioChange(event: Event) {
-    const select = event.target as HTMLSelectElement;
-    selectedScenarioId = select.value;
+  function handleScenarioChange({ scenarioId }: { scenarioId: string }) {
+    selectedScenarioId = scenarioId;
     selectedSubScenarioId = null;
   }
   
@@ -94,33 +97,32 @@
     selectedSubScenarioId = subScenarioId;
   }
   
-  function createScenario() {
-    if (newScenarioName.trim()) {
-      const newScenario = ConceptTestService.createScenario(newScenarioName, newScenarioDescription);
-      newScenarioName = '';
-      newScenarioDescription = '';
-      showCreateScenarioForm = false;
-      loadScenarios();
-      // Select the newly created scenario
-      if (newScenario) {
-        selectedScenarioId = newScenario.id;
-      }
+  function handleScenarioFormSave(event: CustomEvent<{ name: string; description: string }>) {
+    const { name, description } = event.detail;
+    const newScenario = ConceptTestService.createScenario(name, description);
+    showCreateScenarioForm = false;
+    loadScenarios();
+    // Select the newly created scenario
+    if (newScenario) {
+      selectedScenarioId = newScenario.id;
     }
   }
   
-  function addSubScenario() {
-    if (selectedScenarioId && newSubScenarioName.trim()) {
+  function handleScenarioFormCancel() {
+    showCreateScenarioForm = false;
+  }
+  
+  function handleSubScenarioFormSave(event: CustomEvent<{ name: string; description: string; parentId: string | null }>) {
+    const { name, description, parentId } = event.detail;
+    if (selectedScenarioId) {
       const newSubScenario = ConceptTestService.addSubScenarioToScenario(
-        selectedScenarioId, 
-        newSubScenarioName, 
-        newSubScenarioDescription,
-        parentSubScenarioId
+        selectedScenarioId,
+        name,
+        description,
+        parentId
       );
       
-      newSubScenarioName = '';
-      newSubScenarioDescription = '';
       showCreateSubScenarioForm = false;
-      parentSubScenarioId = null;
       
       // Force refresh of the scenarios
       scenarios = [...$testScenarios];
@@ -130,6 +132,11 @@
         selectedSubScenarioId = newSubScenario.id;
       }
     }
+  }
+  
+  function handleSubScenarioFormCancel() {
+    showCreateSubScenarioForm = false;
+    parentSubScenarioId = null;
   }
   
   function handleAddSubScenario(event: CustomEvent) {
@@ -201,30 +208,33 @@
     }
   }
   
-  function addExpectedResult() {
-    if (selectedScenarioId && selectedSubScenarioId && newExpectedResultTarget.trim()) {
-      const expectedResult: ExpectedResult = {
-        type: newExpectedResultType,
-        target: newExpectedResultTarget,
-        expectedVisibility: newExpectedResultVisibility,
-        description: newExpectedResultDescription
-      };
-      
+  function handleExpectedResultFormSave(event: CustomEvent<{
+    type: ExpectedResult['type'];
+    target: string;
+    expectedVisibility: boolean;
+    description: string;
+  }>) {
+    const { type, target, expectedVisibility, description } = event.detail;
+    if (selectedScenarioId && selectedSubScenarioId) {
       ConceptTestService.addExpectedResultToSubScenario(
-        selectedScenarioId, 
-        selectedSubScenarioId, 
-        expectedResult
+        selectedScenarioId,
+        selectedSubScenarioId,
+        {
+          type,
+          target,
+          expectedVisibility,
+          description
+        }
       );
-      
-      newExpectedResultType = 'tab';
-      newExpectedResultTarget = '';
-      newExpectedResultVisibility = true;
-      newExpectedResultDescription = '';
       showExpectedResultForm = false;
       
       // Force refresh of the scenarios
       scenarios = [...$testScenarios];
     }
+  }
+  
+  function handleExpectedResultFormCancel() {
+    showExpectedResultForm = false;
   }
   
   function handleSaveConcepts(event: CustomEvent) {
@@ -306,7 +316,7 @@
     }
   }
   
-  function closeAppliedConceptsSummary() {
+  function handleConceptSummaryClose() {
     showAppliedConceptsSummary = false;
   }
   
@@ -421,7 +431,9 @@
     // Get all the concept expressions from all sections in all tabs
     const conceptExpressions: string[] = [];
     allTabs.forEach(tab => {
-      tab.ORDER_SECTIONS.forEach(section => {
+      // Check if tab has ORDER_SECTIONS
+      const sections = (tab as any).ORDER_SECTIONS || [];
+      sections.forEach((section: any) => {
         if (section.CONCEPT_NAME) {
           conceptExpressions.push(section.CONCEPT_NAME);
         }
@@ -477,160 +489,50 @@
 </script>
 
 <div class="concept-test-manager">
-  <div class="manager-header">
-    <h2>Test Case Manager</h2>
-    
-    <div class="header-actions">
-      <button class="action-btn" on:click={saveScenarios}>
-        Save Scenarios
-      </button>
-      <button class="action-btn" on:click={clearTestResults}>
-        Clear Test Results
-      </button>
-      <button class="action-btn {isEditMode ? 'active' : ''}" on:click={toggleEditMode}>
-        {isEditMode ? 'Exit Edit Mode' : 'Enter Edit Mode'}
-      </button>
-    </div>
-  </div>
+  <ManagerHeader
+    {isEditMode}
+    on:saveScenarios={saveScenarios}
+    on:clearTestResults={clearTestResults}
+    on:toggleEditMode={toggleEditMode}
+  />
   
-  <div class="scenario-selection">
-    <div class="scenario-select">
-      <label for="scenario-select">Select Scenario:</label>
-      <select id="scenario-select" on:change={handleScenarioChange}>
-        {#each scenarios as scenario}
-          <option value={scenario.id} selected={scenario.id === selectedScenarioId}>
-            {scenario.name}
-          </option>
-        {/each}
-      </select>
-    </div>
-    
-    <div class="scenario-actions">
-      <button class="action-btn" on:click={toggleCreateScenarioForm}>
-        Create New Scenario
-      </button>
-      <button class="action-btn" on:click={createMagnesiumScenario}>Create Default Scenario</button>
-      <button class="action-btn" on:click={setConceptsDirectly}>Set All Concepts</button>
-      {#if selectedScenarioId}
-        <button class="action-btn delete-btn" on:click={deleteScenario}>
-          Delete Scenario
-        </button>
-      {/if}
-    </div>
-  </div>
+  <ScenarioSelector
+    {scenarios}
+    {selectedScenarioId}
+    {isEditMode}
+    on:scenarioChange={(event) => handleScenarioChange(event.detail)}
+    on:createScenario={toggleCreateScenarioForm}
+    on:createDefaultScenario={createMagnesiumScenario}
+    on:setAllConcepts={setConceptsDirectly}
+    on:deleteScenario={deleteScenario}
+  />
   
-  {#if showCreateScenarioForm}
-    <div class="form-panel">
-      <h3>Create New Scenario</h3>
-      
-      <div class="form-group">
-        <label for="new-scenario-name">Name:</label>
-        <input 
-          type="text" 
-          id="new-scenario-name" 
-          bind:value={newScenarioName} 
-          placeholder="Enter scenario name"
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="new-scenario-description">Description:</label>
-        <textarea 
-          id="new-scenario-description" 
-          bind:value={newScenarioDescription} 
-          placeholder="Enter scenario description"
-        ></textarea>
-      </div>
-      
-      <div class="form-actions">
-        <button class="cancel-btn" on:click={toggleCreateScenarioForm}>Cancel</button>
-        <button class="submit-btn" on:click={createScenario}>Create Scenario</button>
-      </div>
-    </div>
-  {/if}
+  <ScenarioForm 
+    isOpen={showCreateScenarioForm}
+    on:save={handleScenarioFormSave}
+    on:cancel={handleScenarioFormCancel}
+  />
   
-  {#if showCreateSubScenarioForm}
-    <div class="form-panel">
-      <h3>Add {parentSubScenarioId ? 'Sub-Scenario' : 'Root Scenario'}</h3>
-      
-      <div class="form-group">
-        <label for="new-subscenario-name">Name:</label>
-        <input 
-          type="text" 
-          id="new-subscenario-name" 
-          bind:value={newSubScenarioName} 
-          placeholder="Enter scenario name"
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="new-subscenario-description">Description:</label>
-        <textarea 
-          id="new-subscenario-description" 
-          bind:value={newSubScenarioDescription} 
-          placeholder="Enter scenario description"
-        ></textarea>
-      </div>
-      
-      <div class="form-actions">
-        <button class="cancel-btn" on:click={toggleCreateSubScenarioForm}>Cancel</button>
-        <button class="submit-btn" on:click={addSubScenario}>Add {parentSubScenarioId ? 'Sub-Scenario' : 'Root Scenario'}</button>
-      </div>
-    </div>
-  {/if}
+  <SubScenarioForm 
+    isOpen={showCreateSubScenarioForm}
+    parentId={parentSubScenarioId}
+    on:save={handleSubScenarioFormSave}
+    on:cancel={handleSubScenarioFormCancel}
+  />
   
-  {#if showExpectedResultForm}
-    <div class="form-panel">
-      <h3>Add Expected Result</h3>
-      
-      <div class="form-group">
-        <label for="expected-result-type">Type:</label>
-        <select id="expected-result-type" bind:value={newExpectedResultType}>
-          <option value="tab">Tab</option>
-          <option value="section">Section</option>
-          <option value="order">Order</option>
-          <option value="criterion">Criterion</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="expected-result-target">Target:</label>
-        <input 
-          type="text" 
-          id="expected-result-target" 
-          bind:value={newExpectedResultTarget} 
-          placeholder="Enter target (e.g., MAGNESIUM for tab)"
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="expected-result-visibility">Expected Visibility:</label>
-        <div class="toggle-switch">
-          <input 
-            type="checkbox" 
-            id="expected-result-visibility" 
-            bind:checked={newExpectedResultVisibility} 
-          />
-          <label for="expected-result-visibility"></label>
-          <span>{newExpectedResultVisibility ? 'Visible' : 'Hidden'}</span>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label for="expected-result-description">Description:</label>
-        <textarea 
-          id="expected-result-description" 
-          bind:value={newExpectedResultDescription} 
-          placeholder="Enter description (optional)"
-        ></textarea>
-      </div>
-      
-      <div class="form-actions">
-        <button class="cancel-btn" on:click={toggleExpectedResultForm}>Cancel</button>
-        <button class="submit-btn" on:click={addExpectedResult}>Add Expected Result</button>
-      </div>
-    </div>
-  {/if}
+  <ExpectedResultForm
+    isOpen={showExpectedResultForm}
+    on:save={handleExpectedResultFormSave}
+    on:cancel={handleExpectedResultFormCancel}
+  />
+  
+  <ConceptSummaryModal
+    isOpen={showAppliedConceptsSummary}
+    appliedConcepts={appliedConcepts}
+    inheritedConcepts={inheritedConcepts}
+    totalConceptCount={appliedConcepts.length + inheritedConcepts.length}
+    on:close={handleConceptSummaryClose}
+  />
   
   {#if selectedScenario}
     <div class="scenario-content">
@@ -672,46 +574,17 @@
       {/if}
       
       {#if selectedSubScenarioId}
-        <div class="selected-subscenario-actions">
-          <div class="action-panel">
-            <h4>Selected Scenario Actions</h4>
-            <div class="action-buttons">
-              <button class="action-btn" on:click={editSelectedSubScenario}>
-                Edit Concepts
-              </button>
-              <button class="action-btn" on:click={toggleExpectedResultForm}>
-                Add Expected Result
-              </button>
-              <button 
-                class="btn btn-primary" 
-                on:click={applySubScenarioConcepts}
-                disabled={!selectedScenarioId || !selectedSubScenarioId}
-              >
-                Apply Concepts
-              </button>
-              <button 
-                class="btn btn-danger" 
-                on:click={clearAllConcepts}
-                title="Clear all concepts and reset to default state"
-              >
-                Clear All Concepts
-              </button>
-              <button 
-                class="btn btn-secondary" 
-                on:click={setMagnesiumConcepts}
-                title="Set key concepts for Magnesium tab"
-              >
-                Set Magnesium Concepts
-              </button>
-              <button class="action-btn" on:click={executeTest}>
-                Execute Test
-              </button>
-              <button class="action-btn delete-btn" on:click={deleteSubScenario}>
-                Delete Sub-Scenario
-              </button>
-            </div>
-          </div>
-        </div>
+        <ScenarioActionPanel
+          {selectedScenarioId}
+          {selectedSubScenarioId}
+          on:editConcepts={editSelectedSubScenario}
+          on:addExpectedResult={toggleExpectedResultForm}
+          on:applyConcepts={applySubScenarioConcepts}
+          on:clearConcepts={clearAllConcepts}
+          on:setMagnesiumConcepts={setMagnesiumConcepts}
+          on:executeTest={executeTest}
+          on:deleteSubScenario={deleteSubScenario}
+        />
       {/if}
     </div>
   {:else}
@@ -729,61 +602,6 @@
           on:save={handleSaveConcepts}
           on:cancel={handleCancelEditConcepts}
         />
-      </div>
-    </div>
-  {/if}
-  
-  {#if showAppliedConceptsSummary}
-    <div class="modal-overlay" on:click={closeAppliedConceptsSummary}>
-      <div class="modal-content summary-modal" on:click|stopPropagation>
-        <div class="summary-header">
-          <h3>Applied Concepts Summary</h3>
-          <button class="close-btn" on:click={closeAppliedConceptsSummary}>×</button>
-        </div>
-        
-        <div class="summary-content">
-          <p>Successfully applied {appliedConcepts.length} concepts to the application.</p>
-          
-          {#if inheritedConcepts.length > 0}
-            <div class="inherited-concepts-summary">
-              <h4>Inherited Concepts ({inheritedConcepts.length})</h4>
-              <table class="summary-table">
-                <thead>
-                  <tr>
-                    <th>Concept</th>
-                    <th>Value</th>
-                    <th>Active</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each inheritedConcepts as concept}
-                    <tr>
-                      <td>{concept.conceptName}</td>
-                      <td>
-                        <span class="concept-value {concept.value ? 'true' : 'false'}">
-                          {concept.value ? 'True' : 'False'}
-                        </span>
-                      </td>
-                      <td>
-                        <span class="concept-active {concept.isActive ? 'active' : 'inactive'}">
-                          {concept.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {:else}
-            <p>No concepts were inherited from parent scenarios.</p>
-          {/if}
-        </div>
-        
-        <div class="summary-actions">
-          <button class="action-btn primary" on:click={closeAppliedConceptsSummary}>
-            Close
-          </button>
-        </div>
       </div>
     </div>
   {/if}

@@ -3,6 +3,8 @@
   import type { TestScenario, TestSubScenario, ConceptChange, ExpectedResult } from '../types';
   import { concepts } from '../stores';
   import ConceptStatusIndicator from './ConceptStatusIndicator.svelte';
+  import GlobalConceptStatus from './GlobalConceptStatus.svelte';
+  import ScenarioItem from './ScenarioItem.svelte';
   
   export let scenario: TestScenario;
   export let selectedScenarioId: string | null = null;
@@ -80,239 +82,57 @@
   }
   
   // Add a new sub-scenario
-  function addSubScenario(parentId: string | null) {
+  function handleAddSubScenario(parentId: string | null) {
     dispatch('addSubScenario', { parentId });
   }
   
   // Add a new expected result
-  function addExpectedResult(scenarioId: string) {
+  function handleAddExpectedResult(scenarioId: string) {
     dispatch('addExpectedResult', { scenarioId });
   }
   
   // Add/edit concepts for a scenario
-  function editConcepts(scenarioId: string) {
+  function handleEditConcepts(scenarioId: string) {
     dispatch('editConcepts', { scenarioId });
   }
 
   // Delete a sub-scenario
-  function deleteSubScenario(scenarioId: string) {
+  function handleDeleteScenario(scenarioId: string) {
     dispatch('deleteSubScenario', { scenarioId });
   }
 </script>
 
 <div class="hierarchical-scenario-manager">
+  <GlobalConceptStatus />
+
   <div class="scenario-tree">
     {#if scenario.scenarios.length === 0}
       <div class="empty-state">
         <p>No scenarios defined yet.</p>
         {#if isEditable}
-          <button class="add-scenario-btn" on:click={() => addSubScenario(null)}>
+          <button class="add-scenario-btn" on:click={() => handleAddSubScenario(null)}>
             <span class="btn-icon">+</span> Add Root Scenario
           </button>
         {/if}
       </div>
     {:else}
       {#each scenario.scenarios as subScenario}
-        <div class="scenario-item {selectedScenarioId === subScenario.id ? 'selected' : ''}">
-          <div class="scenario-header" on:click={() => handleScenarioSelect(subScenario)}>
-            <div class="scenario-name">
-              <span class="expand-icon">{subScenario.children.length > 0 ? '▼' : '▶'}</span> 
-              {subScenario.name}
-            </div>
-            {#if isEditable}
-              <div class="scenario-actions">
-                <button class="action-btn edit-btn" on:click|stopPropagation={() => editConcepts(subScenario.id)}>
-                  <span class="btn-icon">✏️</span> Edit Concepts
-                </button>
-                <button class="action-btn" on:click|stopPropagation={() => addExpectedResult(subScenario.id)}>
-                  <span class="btn-icon">✓</span> Add Expected Result
-                </button>
-                <button class="action-btn" on:click|stopPropagation={() => addSubScenario(subScenario.id)}>
-                  <span class="btn-icon">+</span> Add Sub-Scenario
-                </button>
-                <button class="action-btn delete-btn" on:click|stopPropagation={() => deleteSubScenario(subScenario.id)}>
-                  <span class="btn-icon">🗑️</span> Delete
-                </button>
-              </div>
-            {/if}
-          </div>
-          
-          {#if selectedScenarioId === subScenario.id}
-            <div class="scenario-details">
-              <div class="scenario-description">
-                {subScenario.description || 'No description provided.'}
-              </div>
-              
-              <div class="concept-summary">
-                <h4>Concepts</h4>
-                <ConceptStatusIndicator />
-                
-                {#if getActiveConcepts(subScenario, scenario.scenarios).length === 0}
-                  <div class="no-concepts">
-                    <p>No concepts defined for this scenario.</p>
-                  </div>
-                {:else}
-                  <div class="concept-groups">
-                    {#each Object.entries(groupConceptsByCategory(getActiveConcepts(subScenario, scenario.scenarios))) as [category, conceptList]}
-                      <div class="concept-group">
-                        <h5>{category}</h5>
-                        <div class="concept-list">
-                          {#each conceptList as concept}
-                            <div class="concept-item {concept.inherited ? 'inherited' : ''}">
-                              <div class="concept-details">
-                                <span class="concept-name">{concept.conceptName.split('.').slice(1).join('.')}</span>
-                                {#if concept.inherited}
-                                  <span class="inherited-badge" title="Inherited from parent scenario">
-                                    Inherited
-                                  </span>
-                                {/if}
-                              </div>
-                              <ConceptStatusIndicator value={concept.value} isActive={concept.isActive} conceptName={concept.conceptName} />
-                            </div>
-                          {/each}
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-              
-              {#if subScenario.expectedResults.length > 0}
-                <div class="expected-results">
-                  <h4>Expected Results</h4>
-                  <ul>
-                    {#each subScenario.expectedResults as result}
-                      <li>
-                        {result.type}: {result.target} should be {result.expectedVisibility ? 'visible' : 'hidden'}
-                        {#if result.description}({result.description}){/if}
-                      </li>
-                    {/each}
-                  </ul>
-                </div>
-              {/if}
-              
-              {#if isEditable && subScenario.concepts.length === 0}
-                <div class="no-concepts-warning">
-                  <p>This scenario has no concepts defined. Click "Edit Concepts" to add some.</p>
-                  <button class="action-btn edit-btn" on:click={() => editConcepts(subScenario.id)}>
-                    <span class="btn-icon">✏️</span> Edit Concepts
-                  </button>
-                </div>
-              {/if}
-            </div>
-          {/if}
-          
-          {#if subScenario.children.length > 0}
-            <div class="child-scenarios" style="padding-left: 20px">
-              {#each subScenario.children as childScenario}
-                <div class="scenario-item {selectedScenarioId === childScenario.id ? 'selected' : ''}">
-                  <div class="scenario-header" on:click={() => handleScenarioSelect(childScenario)}>
-                    <div class="scenario-name">
-                      <span class="expand-icon">{childScenario.children.length > 0 ? '▼' : '▶'}</span> 
-                      {childScenario.name}
-                    </div>
-                    {#if isEditable}
-                      <div class="scenario-actions">
-                        <button class="action-btn edit-btn" on:click|stopPropagation={() => editConcepts(childScenario.id)}>
-                          <span class="btn-icon">✏️</span> Edit Concepts
-                        </button>
-                        <button class="action-btn" on:click|stopPropagation={() => addExpectedResult(childScenario.id)}>
-                          <span class="btn-icon">✓</span> Add Expected Result
-                        </button>
-                        <button class="action-btn" on:click|stopPropagation={() => addSubScenario(childScenario.id)}>
-                          <span class="btn-icon">+</span> Add Sub-Scenario
-                        </button>
-                        <button class="action-btn delete-btn" on:click|stopPropagation={() => deleteSubScenario(childScenario.id)}>
-                          <span class="btn-icon">🗑️</span> Delete
-                        </button>
-                      </div>
-                    {/if}
-                  </div>
-                  
-                  {#if selectedScenarioId === childScenario.id}
-                    <div class="scenario-details">
-                      <div class="scenario-description">
-                        {childScenario.description || 'No description provided.'}
-                      </div>
-                      
-                      <div class="concept-summary">
-                        <h4>Concepts</h4>
-                        <ConceptStatusIndicator />
-                        
-                        {#if getActiveConcepts(childScenario, scenario.scenarios).length === 0}
-                          <div class="no-concepts">
-                            <p>No concepts defined for this scenario.</p>
-                          </div>
-                        {:else}
-                          <div class="concept-groups">
-                            {#each Object.entries(groupConceptsByCategory(getActiveConcepts(childScenario, scenario.scenarios))) as [category, conceptList]}
-                              <div class="concept-group">
-                                <h5>{category}</h5>
-                                <div class="concept-list">
-                                  {#each conceptList as concept}
-                                    <div class="concept-item {concept.inherited ? 'inherited' : ''}">
-                                      <div class="concept-details">
-                                        <span class="concept-name">{concept.conceptName.split('.').slice(1).join('.')}</span>
-                                        {#if concept.inherited}
-                                          <span class="inherited-badge" title="Inherited from parent scenario">
-                                            Inherited
-                                          </span>
-                                        {/if}
-                                      </div>
-                                      <ConceptStatusIndicator value={concept.value} isActive={concept.isActive} conceptName={concept.conceptName} />
-                                    </div>
-                                  {/each}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {/if}
-                      </div>
-                      
-                      {#if childScenario.expectedResults.length > 0}
-                        <div class="expected-results">
-                          <h4>Expected Results</h4>
-                          <ul>
-                            {#each childScenario.expectedResults as result}
-                              <li>
-                                {result.type}: {result.target} should be {result.expectedVisibility ? 'visible' : 'hidden'}
-                                {#if result.description}({result.description}){/if}
-                              </li>
-                            {/each}
-                          </ul>
-                        </div>
-                      {/if}
-                      
-                      {#if isEditable && childScenario.concepts.length === 0}
-                        <div class="no-concepts-warning">
-                          <p>This scenario has no concepts defined. Click "Edit Concepts" to add some.</p>
-                          <button class="action-btn edit-btn" on:click={() => editConcepts(childScenario.id)}>
-                            <span class="btn-icon">✏️</span> Edit Concepts
-                          </button>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-                  
-                  <!-- Recursively render deeper levels -->
-                  {#if childScenario.children.length > 0}
-                    <svelte:self 
-                      scenario={{ scenarios: childScenario.children }} 
-                      selectedScenarioId={selectedScenarioId}
-                      onScenarioSelect={onScenarioSelect}
-                      isEditable={isEditable}
-                    />
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
+        <ScenarioItem
+          scenario={subScenario}
+          allScenarios={scenario.scenarios}
+          {selectedScenarioId}
+          {onScenarioSelect}
+          {isEditable}
+          onAddSubScenario={handleAddSubScenario}
+          onAddExpectedResult={handleAddExpectedResult}
+          onEditConcepts={handleEditConcepts}
+          onDeleteScenario={handleDeleteScenario}
+        />
       {/each}
       
       {#if isEditable}
         <div class="add-root-scenario">
-          <button class="add-scenario-btn" on:click={() => addSubScenario(null)}>
+          <button class="add-scenario-btn" on:click={() => handleAddSubScenario(null)}>
             <span class="btn-icon">+</span> Add Root Scenario
           </button>
         </div>
@@ -326,226 +146,14 @@
     width: 100%;
     height: 100%;
     overflow: auto;
-    padding: 1rem;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-    border: 1px solid #e0e0e0;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
   }
   
   .scenario-tree {
     width: 100%;
-  }
-  
-  .scenario-item {
-    margin-bottom: 0.5rem;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-  }
-  
-  .scenario-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  
-  .scenario-header:hover {
-    background-color: #f0f7ff;
-  }
-  
-  .scenario-item.selected > .scenario-header {
-    background-color: #e3f2fd;
-    border-color: #2196f3;
-  }
-  
-  .scenario-name {
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .expand-icon {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    text-align: center;
-    line-height: 16px;
-    color: #666;
-  }
-  
-  .scenario-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .action-btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-    background-color: #f0f0f0;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-  
-  .action-btn:hover {
-    background-color: #e0e0e0;
-  }
-  
-  .edit-btn {
-    background-color: #e3f2fd;
-    border-color: #2196f3;
-    color: #0d47a1;
-  }
-  
-  .edit-btn:hover {
-    background-color: #bbdefb;
-  }
-  
-  .btn-icon {
-    font-size: 0.9rem;
-  }
-  
-  .scenario-details {
-    padding: 1rem;
-    background-color: #f5f5f5;
-    border: 1px solid #e0e0e0;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    margin-top: -4px;
-  }
-  
-  .scenario-description {
-    margin-bottom: 1rem;
-    font-style: italic;
-    color: #666;
-  }
-  
-  .concept-summary {
-    margin-top: 1rem;
-    background-color: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 0.75rem;
-  }
-  
-  .concept-summary h4 {
-    margin-top: 0;
-    margin-bottom: 0.75rem;
-    color: #333;
-    font-size: 1rem;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 0.5rem;
-  }
-  
-  .no-concepts {
-    padding: 1rem;
-    background-color: #f9f9f9;
-    border: 1px dashed #ccc;
-    border-radius: 4px;
-    text-align: center;
-    color: #666;
-    font-style: italic;
-  }
-  
-  .concept-groups {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-  
-  .concept-group {
-    flex: 1;
-    min-width: 250px;
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 0.75rem;
-  }
-  
-  .concept-group h5 {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-    color: #333;
-    font-size: 0.9rem;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 0.25rem;
-  }
-  
-  .concept-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  
-  .concept-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-  }
-  
-  .concept-item.inherited {
-    border-left: 3px solid #9c27b0;
-  }
-  
-  .concept-details {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .concept-name {
-    font-size: 0.9rem;
-    color: #555;
-  }
-  
-  .inherited-badge {
-    display: inline-block;
-    padding: 0.1rem 0.3rem;
-    background-color: #f3e5f5;
-    color: #9c27b0;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 500;
-  }
-  
-  .expected-results {
-    background-color: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 0.75rem;
-  }
-  
-  .expected-results h4 {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-    color: #333;
-    font-size: 0.9rem;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 0.25rem;
-  }
-  
-  .expected-results ul {
-    margin: 0;
-    padding-left: 1.5rem;
-  }
-  
-  .expected-results li {
-    margin-bottom: 0.25rem;
-    font-size: 0.9rem;
   }
   
   .empty-state {
@@ -582,38 +190,7 @@
     background-color: #1976d2;
   }
   
-  .no-concepts-warning {
-    background-color: #fff8e1;
-    border: 1px solid #ffe082;
-    border-radius: 4px;
-    padding: 1rem;
-    margin-top: 1rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .no-concepts-warning p {
-    margin: 0;
-    color: #ff8f00;
-    font-style: italic;
-  }
-  
-  .child-scenarios {
-    margin-left: 1rem;
-    border-left: 2px solid #e0e0e0;
-    padding-left: 0.5rem;
-  }
-  
-  .delete-btn {
-    background-color: #dc3545;
-    color: white;
-    border-color: #dc3545;
-  }
-  
-  .delete-btn:hover {
-    background-color: #c82333;
-    border-color: #bd2130;
+  .btn-icon {
+    font-size: 0.9rem;
   }
 </style> 
