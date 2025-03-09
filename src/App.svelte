@@ -111,10 +111,6 @@
             <TabNavigation selectedTab={selectedTab} onTabChange={handleTabChange} />
           </div>
           
-          <div class="mb-4">
-            <ConceptStatusIndicator />
-          </div>
-          
           <div>
             <TabContent {selectedTab} {debugMode} />
           </div>
