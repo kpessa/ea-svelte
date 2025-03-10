@@ -82,7 +82,6 @@
         
         // Use the current concepts state for evaluation
         const result = evaluateConceptExpression(expression, $concepts);
-        console.log(`Evaluating expression: ${expression} => ${result}`);
         return result;
     }
     
@@ -115,24 +114,17 @@
                     const result = evaluateSectionExpression(section.CONCEPT_NAME);
                     newFilteredSections[index] = result;
                     
-                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Result: ${result}`);
-                    
                     if (!result) {
                         newHiddenCount++;
                     }
                 } catch (error) {
                     newFilteredSections[index] = false;
-                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Error evaluating`);
                     newHiddenCount++;
                 }
             } else {
                 newFilteredSections[index] = true;
-                console.log(`Section ${index}: "${section.SECTION_NAME}" - No expression - Showing by default`);
             }
         });
-
-        console.log('Filtered sections:', newFilteredSections);
-        console.log('Hidden count:', newHiddenCount);
 
         // Update the state with new objects to trigger reactivity
         filteredSections = newFilteredSections;
@@ -144,7 +136,6 @@
     
     // Show all sections
     function showAllSections() {
-        console.log('Showing all sections');
         filteringEnabled = false;
         hiddenSectionCount = 0;
         filteredSections = {};
@@ -216,24 +207,17 @@
                     const result = evaluateSectionExpression(section.CONCEPT_NAME);
                     newFilteredSections[index] = result;
                     
-                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Result: ${result}`);
-                    
                     if (!result) {
                         newHiddenCount++;
                     }
                 } catch (error) {
                     newFilteredSections[index] = false;
-                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Error evaluating`);
                     newHiddenCount++;
                 }
             } else {
                 newFilteredSections[index] = true;
-                console.log(`Section ${index}: "${section.SECTION_NAME}" - No expression - Showing by default`);
             }
         });
-
-        console.log('Filtered sections:', newFilteredSections);
-        console.log('Hidden count:', newHiddenCount);
 
         // Update the state with new objects to trigger reactivity
         filteredSections = newFilteredSections;

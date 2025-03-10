@@ -9,6 +9,7 @@
   let totalConceptCount = 0;
   let unsubscribe: () => void;
   let showTooltip = false;
+  let tooltipPinned = false;
   let activeConceptsList: { name: string; value: any }[] = [];
   let inactiveConceptsList: { name: string; value: any }[] = [];
 
@@ -52,6 +53,39 @@
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
+
+  // Function to clear all concepts
+  function clearAllConcepts() {
+    concepts.set({});
+    // Dispatch an event to notify other components
+    const event = new CustomEvent('concepts-applied', { bubbles: true });
+    document.dispatchEvent(event);
+  }
+
+  // Toggle tooltip visibility
+  function toggleTooltip() {
+    tooltipPinned = !tooltipPinned;
+    showTooltip = tooltipPinned;
+  }
+
+  // Handle mouse enter/leave
+  function handleMouseEnter() {
+    if (!tooltipPinned) {
+      showTooltip = true;
+    }
+  }
+
+  function handleMouseLeave() {
+    if (!tooltipPinned) {
+      showTooltip = false;
+    }
+  }
+
+  // Close tooltip
+  function closeTooltip() {
+    tooltipPinned = false;
+    showTooltip = false;
+  }
 </script>
 
 <div 
@@ -60,11 +94,12 @@
   tabindex="0"
   aria-expanded={showTooltip}
   aria-label="Concept status indicator: {activeConceptCount} active out of {totalConceptCount} total concepts"
-  on:mouseenter={() => showTooltip = true}
-  on:mouseleave={() => showTooltip = false}
+  on:mouseenter={handleMouseEnter}
+  on:mouseleave={handleMouseLeave}
+  on:click={toggleTooltip}
   on:keydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-      showTooltip = !showTooltip;
+      toggleTooltip();
       e.preventDefault();
     }
   }}
@@ -81,11 +116,32 @@
   </div>
   <div class="indicator-icon">🧠</div>
 
-  {#if showTooltip && (activeConceptsList.length > 0 || inactiveConceptsList.length > 0)}
+  {#if showTooltip && (activeConceptsList.length > 0 || inactiveConceptsList.length > 0 || tooltipPinned)}
     <div 
       class="concepts-tooltip"
       role="tooltip"
+      on:click|stopPropagation={() => {}}
     >
+      <div class="tooltip-header">
+        <h4>Concepts ({totalConceptCount})</h4>
+        <div class="tooltip-actions">
+          <button 
+            class="clear-all-btn"
+            on:click|stopPropagation={clearAllConcepts}
+            title="Clear all concepts"
+          >
+            Clear All
+          </button>
+          <button 
+            class="close-tooltip-btn"
+            on:click|stopPropagation={closeTooltip}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      
       {#if activeConceptsList.length > 0}
         <h4>Active Concepts ({activeConceptsList.length})</h4>
         <div class="concepts-list">
@@ -111,6 +167,12 @@
               </span>
             </div>
           {/each}
+        </div>
+      {/if}
+      
+      {#if activeConceptsList.length === 0 && inactiveConceptsList.length === 0}
+        <div class="no-concepts">
+          No concepts defined
         </div>
       {/if}
     </div>
@@ -191,13 +253,63 @@
     z-index: 1000;
   }
 
-  .concepts-tooltip h4 {
+  .tooltip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin: 0;
     padding: 8px 12px;
     background-color: #f5f5f5;
     border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .tooltip-header h4 {
+    margin: 0;
     font-size: 14px;
     color: #333;
+  }
+  
+  .tooltip-actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .clear-all-btn {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .clear-all-btn:hover {
+    background-color: #d32f2f;
+  }
+  
+  .close-tooltip-btn {
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #666;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: 3px;
+  }
+  
+  .close-tooltip-btn:hover {
+    background-color: #e0e0e0;
+    color: #333;
+  }
+  
+  .no-concepts {
+    padding: 15px;
+    text-align: center;
+    color: #666;
+    font-style: italic;
   }
 
   .concepts-list {
