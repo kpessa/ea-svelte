@@ -8,7 +8,7 @@
   export let conceptsSnapshot: Record<string, Concept | undefined> = {};
   
   const dispatch = createEventDispatcher<{
-    toggleConcept: { conceptName: string }
+    toggleConcept: { conceptName: string, newConcept: Concept | undefined }
   }>();
   
   let evaluationResult: boolean | null = null;
@@ -59,7 +59,18 @@
   
   function handleConceptToggle(event: CustomEvent<{ name: string, newConcept: Concept | undefined }>) {
     const { name, newConcept } = event.detail;
-    dispatch('toggleConcept', { conceptName: name });
+    
+    // Update local snapshot
+    conceptsSnapshot = {
+      ...conceptsSnapshot,
+      [name]: newConcept
+    };
+    
+    // Forward the event to parent
+    dispatch('toggleConcept', { conceptName: name, newConcept });
+    
+    // Re-evaluate the expression with updated concept state
+    evaluateExpression();
   }
   
   // Expose the evaluateExpression method to parent components

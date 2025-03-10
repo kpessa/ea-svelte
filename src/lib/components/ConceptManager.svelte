@@ -8,7 +8,7 @@
   import ConceptHierarchySelector from './ConceptHierarchySelector.svelte';
   import type { Concept, ConceptReference, TestScenario, TestResult, TestPath } from '../types';
   
-  // Import the new components
+  // Import the components
   import ExtractToolsPanel from './ExtractToolsPanel.svelte';
   import ConceptReportPanel from './ConceptReportPanel.svelte';
   import ConceptFormPanel from './ConceptFormPanel.svelte';
@@ -17,6 +17,16 @@
   import ImportExportPanel from './ImportExportPanel.svelte';
 
   export let show = false;
+
+  // Tab management
+  let selectedTab = 'concepts';
+  const tabs = [
+    { id: 'concepts', label: 'Concepts List' },
+    { id: 'hierarchy', label: 'Concept Hierarchy' },
+    { id: 'expressions', label: 'Expression Tools' },
+    { id: 'testing', label: 'Test Integration' },
+    { id: 'import-export', label: 'Import/Export' }
+  ];
 
   let conceptsSnapshot: Record<string, Concept> = {};
   let searchTerm = '';
@@ -52,8 +62,6 @@
   // Subscribe to concepts store
   const unsubConcepts = concepts.subscribe((value: Record<string, Concept>) => {
     conceptsSnapshot = { ...value };
-    
-    // Update selected concepts when concept store changes
     updateSelectedConceptsFromStore();
   });
   
@@ -72,7 +80,6 @@
   
   // Subscribe to test results for visualization
   const unsubTestResults = testResults.subscribe((results: TestResult[]) => {
-    // Update visualization when test results change
     if (results.length > 0) {
       updateConceptEvaluationDetails();
     }
@@ -493,125 +500,121 @@
 </script>
 
 <div class="concept-manager">
-  <div class="concept-modal-grid">
-    <!-- Configuration Tools -->
-    <ExtractToolsPanel
-      bind:showConceptReport
-      bind:showEvaluationDetails
-      bind:showSectionControl
-      bind:showTestIntegration
-      on:extractConcepts={handleExtractConcepts}
-      on:toggleConceptReport={handleToggleConceptReport}
-      on:toggleEvaluationDetails={handleToggleEvaluationDetails}
-      on:toggleSectionControl={handleToggleSectionControl}
-      on:toggleTestIntegration={handleToggleTestIntegration}
-    />
-    
-    <!-- Concept Reports and Evaluation Details -->
-    <ConceptReportPanel
-      {conceptReport}
-      {showConceptReport}
-      {showEvaluationDetails}
-      {conceptEvaluationDetails}
-      {conceptsSnapshot}
-      {showSectionControl}
-      {sectionVisibilityControl}
-      on:toggleSectionVisibility={handleToggleSectionVisibility}
-    />
-    
-    <!-- Main Content Area -->
-    <div class="concept-main-content">
-      <!-- Hierarchical Concept Selector -->
-      <div class="concept-section">
-        <h3>Concepts</h3>
-        
-        <div class="concept-hierarchy">
-          <ConceptHierarchySelector 
-            bind:selectedConcepts
-            bind:conceptChangeValues
-            bind:conceptChangeActive
-            on:conceptsChanged={handleConceptsChanged}
+  <!-- Tab Navigation -->
+  <div class="tabs-container">
+    {#each tabs as tab}
+      <button 
+        class="tab-button {selectedTab === tab.id ? 'active' : ''}"
+        on:click={() => selectedTab = tab.id}
+      >
+        {tab.label}
+      </button>
+    {/each}
+  </div>
+
+  <!-- Tab Content -->
+  <div class="tab-content">
+    {#if selectedTab === 'concepts'}
+      <div class="concepts-tab">
+        <div class="concept-list-section">
+          <h3>Concept List</h3>
+          
+          <div class="search-box">
+            <input 
+              type="text" 
+              placeholder="Search concepts..." 
+              bind:value={searchTerm}
+            />
+          </div>
+          
+          <div class="concept-list">
+            {#each filteredConcepts as [name, concept]}
+              <div class="concept-item">
+                <div class="concept-info">
+                  <span class="concept-name">{name}</span>
+                  <span class="concept-value {concept.value ? 'true' : 'false'}">
+                    {concept.value ? 'True' : 'False'}
+                  </span>
+                  <span class="concept-status {concept.isActive ? 'active' : 'inactive'}">
+                    {concept.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div class="concept-actions">
+                  <button class="action-btn edit-btn" on:click={() => startEditConcept(name)}>
+                    Edit
+                  </button>
+                  <button class="action-btn delete-btn" on:click={() => deleteConcept(name)}>
+                    Delete
+                  </button>
+                  <button 
+                    class="action-btn toggle-btn" 
+                    on:click={() => toggleConceptActive(name)}
+                  >
+                    {concept.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+
+          <ConceptFormPanel
+            {conceptsSnapshot}
+            {editMode}
+            bind:newConceptName
+            bind:newConceptValue
+            bind:editingConceptName
+            bind:editingConceptOriginalName
+            bind:validationError
+            on:createConcept={handleCreateConcept}
+            on:saveConcept={handleSaveConcept}
+            on:cancelEdit={handleCancelEdit}
           />
         </div>
       </div>
-      
-      <!-- Concept List -->
-      <div class="concept-list-section">
-        <h3>Concept List</h3>
-        
-        <div class="search-box">
-          <input 
-            type="text" 
-            placeholder="Search concepts..." 
-            bind:value={searchTerm}
-          />
-        </div>
-        
-        <div class="concept-list">
-          {#each filteredConcepts as [name, concept]}
-            <div class="concept-item">
-              <div class="concept-info">
-                <span class="concept-name">{name}</span>
-                <span class="concept-value {concept.value ? 'true' : 'false'}">
-                  {concept.value ? 'True' : 'False'}
-                </span>
-                <span class="concept-status {concept.isActive ? 'active' : 'inactive'}">
-                  {concept.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              <div class="concept-actions">
-                <button class="action-btn edit-btn" on:click={() => startEditConcept(name)}>
-                  Edit
-                </button>
-                <button class="action-btn delete-btn" on:click={() => deleteConcept(name)}>
-                  Delete
-                </button>
-                <button 
-                  class="action-btn toggle-btn" 
-                  on:click={() => toggleConceptActive(name)}
-                >
-                  {concept.isActive ? 'Deactivate' : 'Activate'}
-                </button>
-              </div>
-            </div>
-          {/each}
-        </div>
+    {:else if selectedTab === 'hierarchy'}
+      <div class="hierarchy-tab">
+        <ConceptHierarchySelector 
+          bind:selectedConcepts
+          bind:conceptChangeValues
+          bind:conceptChangeActive
+          on:conceptsChanged={handleConceptsChanged}
+        />
       </div>
-    </div>
-    
-    <!-- Sidebar -->
-    <div class="concept-sidebar">
-      <!-- Create/Edit Concept Form -->
-      <ConceptFormPanel
-        {conceptsSnapshot}
-        {editMode}
-        bind:newConceptName
-        bind:newConceptValue
-        bind:editingConceptName
-        bind:editingConceptOriginalName
-        bind:validationError
-        on:createConcept={handleCreateConcept}
-        on:saveConcept={handleSaveConcept}
-        on:cancelEdit={handleCancelEdit}
-      />
-      
-      <!-- Expression Evaluator -->
-      <ConceptExpressionPanel
-        {conceptsSnapshot}
-        {configExpressions}
-        on:toggleConcept={handleToggleConcept}
-      />
-      
-      <!-- Import/Export Section -->
-      <ImportExportPanel
-        {conceptsSnapshot}
-        on:importConcepts={handleImportConcepts}
-      />
-    </div>
-    
-    <!-- Test Integration Section -->
-    {#if showTestIntegration}
-      <div class="test-integration-container">
+    {:else if selectedTab === 'expressions'}
+      <div class="expressions-tab">
+        <ExtractToolsPanel
+          bind:showConceptReport
+          bind:showEvaluationDetails
+          bind:showSectionControl
+          bind:showTestIntegration
+          on:extractConcepts={handleExtractConcepts}
+          on:toggleConceptReport={handleToggleConceptReport}
+          on:toggleEvaluationDetails={handleToggleEvaluationDetails}
+          on:toggleSectionControl={handleToggleSectionControl}
+          on:toggleTestIntegration={handleToggleTestIntegration}
+        />
+
+        <ConceptExpressionPanel
+          {conceptsSnapshot}
+          {configExpressions}
+          on:toggleConcept={handleToggleConcept}
+        />
+
+        {#if showConceptReport || showEvaluationDetails}
+          <ConceptReportPanel
+            {conceptReport}
+            {showConceptReport}
+            {showEvaluationDetails}
+            {conceptEvaluationDetails}
+            {conceptsSnapshot}
+            {showSectionControl}
+            {sectionVisibilityControl}
+            on:toggleSectionVisibility={handleToggleSectionVisibility}
+          />
+        {/if}
+      </div>
+    {:else if selectedTab === 'testing'}
+      <div class="testing-tab">
         <TestIntegrationPanel
           testScenarios={$testScenarios}
           {selectedConcepts}
@@ -619,6 +622,13 @@
           {conceptChangeActive}
           on:addToTestScenario={handleAddToTestScenario}
           on:applyFromTestScenario={handleApplyFromTestScenario}
+        />
+      </div>
+    {:else if selectedTab === 'import-export'}
+      <div class="import-export-tab">
+        <ImportExportPanel
+          {conceptsSnapshot}
+          on:importConcepts={handleImportConcepts}
         />
       </div>
     {/if}
@@ -632,56 +642,59 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background-color: #f9f9f9;
+    padding: 1rem;
   }
 
-  .concept-modal-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    grid-template-rows: auto auto 1fr;
-    gap: 20px;
-  }
-  
-  .concept-main-content {
-    grid-column: 1 / 2;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    gap: 20px;
-  }
-  
-  .concept-sidebar {
-    grid-column: 2 / 3;
+  .tabs-container {
     display: flex;
-    flex-direction: column;
-    gap: 20px;
+    gap: 0.5rem;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 1rem;
+    background-color: white;
+    padding: 0.5rem 1rem 0;
+    border-radius: 0.5rem 0.5rem 0 0;
   }
-  
-  .test-integration-container {
-    grid-column: 1 / -1;
+
+  .tab-button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.2s;
   }
-  
-  .concept-section {
-    border: 1px solid #eee;
-    border-radius: 5px;
-    padding: 15px;
-    background-color: #f9f9f9;
+
+  .tab-button:hover {
+    color: #2196f3;
   }
-  
-  .concept-section h3 {
-    margin-top: 0;
-    color: #333;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-    margin-bottom: 15px;
+
+  .tab-button.active {
+    color: #2196f3;
+    border-bottom-color: #2196f3;
   }
-  
-  .concept-hierarchy {
-    height: 300px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    overflow: hidden;
+
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    background-color: white;
+    border-radius: 0 0 0.5rem 0.5rem;
+    padding: 1rem;
   }
-  
+
+  /* Tab-specific styles */
+  .concepts-tab,
+  .hierarchy-tab,
+  .expressions-tab,
+  .testing-tab,
+  .import-export-tab {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  /* Existing styles */
   .concept-list-section {
     border: 1px solid #eee;
     border-radius: 5px;
@@ -715,6 +728,7 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     background-color: white;
+    margin-bottom: 1rem;
   }
   
   .concept-item {
@@ -798,18 +812,16 @@
   .toggle-btn {
     background-color: #9e9e9e;
   }
-  
+
   @media (max-width: 768px) {
-    .concept-modal-grid {
-      grid-template-columns: 1fr;
+    .tabs-container {
+      flex-wrap: wrap;
     }
     
-    .concept-main-content {
-      grid-column: 1 / -1;
-    }
-    
-    .concept-sidebar {
-      grid-column: 1 / -1;
+    .tab-button {
+      flex: 1;
+      min-width: 120px;
+      text-align: center;
     }
   }
 </style> 
