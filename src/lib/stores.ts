@@ -19,9 +19,13 @@ export interface EvaluationStep {
 }
 
 // Helper function to evaluate concept expressions with detailed steps
-export function evaluateConceptExpressionWithSteps(expression: string): { result: boolean, steps: EvaluationStep[] } {
+export function evaluateConceptExpressionWithSteps(
+  expression: string, 
+  providedConcepts?: Record<string, Concept | undefined>
+): { result: boolean, steps: EvaluationStep[] } {
     const steps: EvaluationStep[] = [];
-    const conceptsSnapshot = get(concepts);
+    // Use provided concepts if available, otherwise get from store
+    const conceptsSnapshot = providedConcepts || get(concepts);
     
     // Add the initial step with the original expression
     steps.push({
@@ -78,17 +82,18 @@ export function evaluateConceptExpressionWithSteps(expression: string): { result
     // Replace all concept references with their values
     while ((match = conceptRegex.exec(processedExpression)) !== null) {
         const conceptName = match[1].trim();
-        const conceptValue = conceptsSnapshot[conceptName]?.value ?? false;
-        const isActive = conceptsSnapshot[conceptName]?.isActive ?? false;
+        const concept = conceptsSnapshot[conceptName];
         
-        // If concept is not active, its value is considered false
-        const effectiveValue = isActive ? conceptValue : false;
+        // If concept is undefined or not active, its value is considered false
+        const effectiveValue = concept?.isActive ?? false;
         
         // Add a step for each concept substitution
         steps.push({
             expression: `{${conceptName}}`,
             result: effectiveValue,
-            explanation: `Substituting concept "${conceptName}" with its value: ${effectiveValue}`,
+            explanation: concept 
+                ? `Substituting concept "${conceptName}" with its isActive state: ${effectiveValue}` 
+                : `Concept "${conceptName}" is undefined, treating as false`,
             isSubExpression: true,
             conceptName,
             conceptValue: effectiveValue
@@ -103,7 +108,7 @@ export function evaluateConceptExpressionWithSteps(expression: string): { result
         steps.push({
             expression: modifiedExpression,
             result: null,
-            explanation: 'Expression with all concepts replaced by their values'
+            explanation: 'Expression with all concepts replaced by their isActive states'
         });
     }
     
@@ -134,8 +139,8 @@ export function evaluateConceptExpressionWithSteps(expression: string): { result
 }
 
 // Helper function to evaluate concept expressions (simplified version)
-export function evaluateConceptExpression(expression: string): boolean {
-    const { result } = evaluateConceptExpressionWithSteps(expression);
+export function evaluateConceptExpression(expression: string, providedConcepts?: Record<string, Concept>): boolean {
+    const { result } = evaluateConceptExpressionWithSteps(expression, providedConcepts);
     return result;
 }
 

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import ConceptExpressionPanel from './ConceptExpressionPanel.svelte';
+import type { Concept } from '../types';
 
 const meta = {
   title: 'Components/ConceptExpressionPanel',
@@ -15,15 +16,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Sample concepts for the stories
-const sampleConcepts = {
-  'ConceptA': { value: true, isActive: true },
-  'ConceptB': { value: false, isActive: true },
+const sampleConcepts: Record<string, Concept | undefined> = {
+  'ConceptA': { value: 'Text value A', isActive: true },
+  'ConceptB': { value: 42, isActive: true },
   'ConceptC': { value: true, isActive: false },
-  'ConceptD': { value: false, isActive: false },
-  'MagnesiumLow': { value: true, isActive: true },
-  'MagnesiumHigh': { value: false, isActive: true },
-  'PatientAge': { value: true, isActive: true },
-  'HasRecentLabs': { value: false, isActive: false }
+  'MagnesiumLow': { value: 'Low magnesium level', isActive: true },
+  'MagnesiumHigh': { value: 'High magnesium level', isActive: false },
+  'ConceptD': undefined
 };
 
 // Sample config expressions
@@ -39,6 +38,10 @@ const sampleConfigExpressions = [
   { 
     expression: '{MagnesiumLow} AND NOT {MagnesiumHigh}', 
     path: 'config/magnesium.json' 
+  },
+  {
+    expression: '{ConceptA} AND {ConceptD}',
+    path: 'config/undefined.json'
   }
 ];
 
@@ -50,7 +53,7 @@ export const Default: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Default ConceptExpressionPanel with sample concepts and config expressions.'
+        story: 'Default ConceptExpressionPanel with sample concepts and config expressions. Evaluates expressions based on the isActive state of concepts. Active concepts are shown in green, inactive in red, and undefined in grey. ConceptD is undefined and will be treated as false in evaluations.'
       }
     }
   }
@@ -78,7 +81,7 @@ export const InteractivePanel: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Interactive ConceptExpressionPanel where concepts can be toggled.'
+        story: 'Interactive ConceptExpressionPanel where concepts can be toggled between three states: Active (green) → Inactive (red) → Undefined (grey) → Active (green). All three states are visible in the UI.'
       }
     }
   },
@@ -94,12 +97,21 @@ export const InteractivePanel: Story = {
         
         const concept = args.conceptsSnapshot[conceptName];
         
-        if (concept) {
-          // Toggle the concept value
+        if (!concept) {
+          // If undefined, set to active
+          args.conceptsSnapshot[conceptName] = {
+            value: `Value for ${conceptName}`,
+            isActive: true
+          };
+        } else if (concept.isActive) {
+          // If active, set to inactive (keep the same value)
           args.conceptsSnapshot[conceptName] = {
             ...concept,
-            value: !concept.value
+            isActive: false
           };
+        } else {
+          // If inactive, set to undefined
+          args.conceptsSnapshot[conceptName] = undefined;
         }
         
         return args;

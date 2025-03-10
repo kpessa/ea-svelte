@@ -14,6 +14,9 @@
                 <div class="flex-shrink-0 flex items-center">
                     <h1 class="text-xl font-bold text-primary-700">Electrolyte Advisor</h1>
                 </div>
+                <div class="ml-6 flex space-x-4">
+                    <slot />
+                </div>
             </div>
             <div class="flex items-center space-x-4">
                 <slot name="actions" />

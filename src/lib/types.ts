@@ -1,5 +1,5 @@
 export interface Concept {
-    value: boolean;
+    value: boolean | number | string;
     isActive: boolean;
     description?: string;
 }

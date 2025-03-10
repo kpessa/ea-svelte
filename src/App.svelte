@@ -9,24 +9,25 @@
   import ConceptManager from './lib/components/ConceptManager.svelte';
   import ConceptTestManager from './lib/components/ConceptTestManager.svelte';
   import { ConfigService, configStore, currentConfigName } from './lib/services/configService';
-  import type { Tab } from './lib/types';
+  import type { ElectrolyteTab } from './lib/types';
   import './app.css';
   import ConceptStatusIndicator from './lib/components/ConceptStatusIndicator.svelte';
   import CriteriaPanel from './lib/components/CriteriaPanel.svelte';
 
   let showConfigEditor = false;
   let configEditorFullScreen = false;
-  let selectedTab: Tab = 'MAGNESIUM';
+  let selectedTab: ElectrolyteTab = 'MAGNESIUM';
   let error: string | null = null;
   let debugMode = false;
   let showConceptTestManager = false;
+  let showConceptManager = false;
 
   onMount(async () => {
     try {
       const config = await ConfigService.loadConfig('/config.json');
       // Set initial tab to first available tab if exists
       if (config.RCONFIG.TABS.length > 0) {
-        selectedTab = config.RCONFIG.TABS[0].TAB_KEY;
+        selectedTab = config.RCONFIG.TABS[0].TAB_KEY as ElectrolyteTab;
       }
       
       // Add global event listener for debugging
@@ -41,7 +42,7 @@
     }
   });
 
-  function handleTabChange(tab: Tab) {
+  function handleTabChange(tab: ElectrolyteTab) {
     selectedTab = tab;
   }
 
@@ -57,6 +58,10 @@
   
   function toggleConceptTestManager() {
     showConceptTestManager = !showConceptTestManager;
+  }
+
+  function toggleConceptManager() {
+    showConceptManager = !showConceptManager;
   }
 </script>
 
@@ -89,6 +94,15 @@
         <span class="hidden sm:inline mr-1">Test Manager</span>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </button>
+      <button 
+        class="btn btn-sm flex items-center" 
+        on:click={() => toggleConceptManager()}
+      >
+        <span class="hidden sm:inline mr-1">Concept Manager</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
         </svg>
       </button>
     </div>
@@ -160,6 +174,29 @@
         </div>
         <div class="flex-grow overflow-hidden">
           <ConceptTestManager />
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showConceptManager}
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 fade-in">
+      <div class="w-full h-full bg-white rounded-lg shadow-xl flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+          <h2 class="text-lg font-bold">Concept Manager</h2>
+          <div class="flex space-x-2">
+            <button 
+              class="p-2 rounded-md hover:bg-gray-100" 
+              on:click={() => toggleConceptManager()}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="flex-grow overflow-hidden">
+          <ConceptManager show={showConceptManager} />
         </div>
       </div>
     </div>

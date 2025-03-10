@@ -9,15 +9,15 @@
   import type { Concept, ConceptReference, TestScenario, TestResult, TestPath } from '../types';
   
   // Import the new components
-  import ConceptModalContainer from './ConceptModalContainer.svelte';
   import ExtractToolsPanel from './ExtractToolsPanel.svelte';
   import ConceptReportPanel from './ConceptReportPanel.svelte';
   import ConceptFormPanel from './ConceptFormPanel.svelte';
   import ConceptExpressionPanel from './ConceptExpressionPanel.svelte';
   import TestIntegrationPanel from './TestIntegrationPanel.svelte';
   import ImportExportPanel from './ImportExportPanel.svelte';
-  
-  let showModal = false;
+
+  export let show = false;
+
   let conceptsSnapshot: Record<string, Concept> = {};
   let searchTerm = '';
   let newConceptName = '';
@@ -88,16 +88,16 @@
     Object.entries(conceptsSnapshot).forEach(([name, concept]) => {
       if (concept.isActive) {
         selectedConcepts.push(name);
-        conceptChangeValues[name] = concept.value;
+        conceptChangeValues[name] = typeof concept.value === 'boolean' ? concept.value : false;
         conceptChangeActive[name] = concept.isActive;
       }
     });
   }
   
   function handleToggleModal(event: CustomEvent) {
-    showModal = event.detail.showModal;
+    show = event.detail.showModal;
     
-    if (showModal) {
+    if (show) {
       // Reset state when opening modal
       searchTerm = '';
       newConceptName = '';
@@ -177,7 +177,8 @@
     editMode = true;
     editingConceptOriginalName = conceptName;
     editingConceptName = conceptName;
-    newConceptValue = conceptsSnapshot[conceptName]?.value || false;
+    const value = conceptsSnapshot[conceptName]?.value;
+    newConceptValue = typeof value === 'boolean' ? value : false;
   }
   
   function deleteConcept(conceptName: string) {
@@ -387,9 +388,10 @@
       if (expression) {
         // Extract dependencies from expression
         const dependencies = extractDependenciesFromExpression(expression);
+        const value = conceptsSnapshot[ref.name]?.value;
         
         conceptEvaluationDetails[ref.name] = {
-          value: conceptsSnapshot[ref.name]?.value || false,
+          value: typeof value === 'boolean' ? value : false,
           expression: expression,
           dependencies
         };
@@ -490,10 +492,7 @@
   });
 </script>
 
-<ConceptModalContainer 
-  bind:showModal
-  on:toggleModal={handleToggleModal}
->
+<div class="concept-manager">
   <div class="concept-modal-grid">
     <!-- Configuration Tools -->
     <ExtractToolsPanel
@@ -624,9 +623,17 @@
       </div>
     {/if}
   </div>
-</ConceptModalContainer>
+</div>
 
 <style>
+  .concept-manager {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .concept-modal-grid {
     display: grid;
     grid-template-columns: 2fr 1fr;

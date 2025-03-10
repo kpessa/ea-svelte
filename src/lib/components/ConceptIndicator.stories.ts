@@ -21,35 +21,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ActiveTrue: Story = {
+export const Active: Story = {
   args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
-    showValue: true,
+    conceptName: 'ActiveConcept',
+    concept: { value: 'Some value', isActive: true },
+    showValue: false,
     showName: true,
     size: 'medium'
   },
   parameters: {
     docs: {
       description: {
-        story: 'Concept that is active and has a value of true (green).'
-      }
-    }
-  }
-};
-
-export const ActiveFalse: Story = {
-  args: {
-    conceptName: 'ConceptB',
-    concept: { value: false, isActive: true },
-    showValue: true,
-    showName: true,
-    size: 'medium'
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Concept that is active and has a value of false (red).'
+        story: 'Concept that is active (green). The isActive state determines the color, not the value.'
       }
     }
   }
@@ -57,8 +40,42 @@ export const ActiveFalse: Story = {
 
 export const Inactive: Story = {
   args: {
-    conceptName: 'ConceptC',
-    concept: { value: true, isActive: false },
+    conceptName: 'InactiveConcept',
+    concept: { value: 'Some value', isActive: false },
+    showValue: false,
+    showName: true,
+    size: 'medium'
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Concept that is inactive (red). The isActive state determines the color, not the value.'
+      }
+    }
+  }
+};
+
+export const Undefined: Story = {
+  args: {
+    conceptName: 'UndefinedConcept',
+    concept: undefined,
+    showValue: false,
+    showName: true,
+    size: 'medium'
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Concept that is undefined (grey).'
+      }
+    }
+  }
+};
+
+export const WithTextValue: Story = {
+  args: {
+    conceptName: 'TextValueConcept',
+    concept: { value: 'Some text value', isActive: true },
     showValue: true,
     showName: true,
     size: 'medium'
@@ -66,7 +83,41 @@ export const Inactive: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Concept that is inactive (grey).'
+        story: 'Concept with a text value displayed.'
+      }
+    }
+  }
+};
+
+export const WithBooleanValue: Story = {
+  args: {
+    conceptName: 'BooleanValueConcept',
+    concept: { value: true, isActive: true },
+    showValue: true,
+    showName: true,
+    size: 'medium'
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Concept with a boolean value displayed.'
+      }
+    }
+  }
+};
+
+export const WithNumberValue: Story = {
+  args: {
+    conceptName: 'NumberValueConcept',
+    concept: { value: 42, isActive: true },
+    showValue: true,
+    showName: true,
+    size: 'medium'
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Concept with a number value displayed.'
       }
     }
   }
@@ -74,9 +125,9 @@ export const Inactive: Story = {
 
 export const Small: Story = {
   args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
-    showValue: true,
+    conceptName: 'SmallConcept',
+    concept: { value: 'Some value', isActive: true },
+    showValue: false,
     showName: true,
     size: 'small'
   },
@@ -91,9 +142,9 @@ export const Small: Story = {
 
 export const Large: Story = {
   args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
-    showValue: true,
+    conceptName: 'LargeConcept',
+    concept: { value: 'Some value', isActive: true },
+    showValue: false,
     showName: true,
     size: 'large'
   },
@@ -108,8 +159,8 @@ export const Large: Story = {
 
 export const IconOnly: Story = {
   args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
+    conceptName: 'IconOnlyConcept',
+    concept: { value: 'Some value', isActive: true },
     showValue: false,
     showName: false,
     size: 'medium'
@@ -125,8 +176,8 @@ export const IconOnly: Story = {
 
 export const NameOnly: Story = {
   args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
+    conceptName: 'NameOnlyConcept',
+    concept: { value: 'Some value', isActive: true },
     showValue: false,
     showName: true,
     size: 'medium'
@@ -134,41 +185,7 @@ export const NameOnly: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Concept indicator showing only the name and icon.'
-      }
-    }
-  }
-};
-
-export const ValueOnly: Story = {
-  args: {
-    conceptName: 'ConceptA',
-    concept: { value: true, isActive: true },
-    showValue: true,
-    showName: false,
-    size: 'medium'
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Concept indicator showing only the value and icon.'
-      }
-    }
-  }
-};
-
-export const Undefined: Story = {
-  args: {
-    conceptName: 'MissingConcept',
-    concept: undefined,
-    showValue: true,
-    showName: true,
-    size: 'medium'
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Concept indicator for an undefined concept.'
+        story: 'Concept indicator showing only the name and icon (default).'
       }
     }
   }
@@ -177,8 +194,8 @@ export const Undefined: Story = {
 export const Interactive: Story = {
   args: {
     conceptName: 'InteractiveConcept',
-    concept: { value: true, isActive: true },
-    showValue: true,
+    concept: { value: 'Some value', isActive: true },
+    showValue: false,
     showName: true,
     size: 'medium',
     interactive: true
@@ -186,7 +203,7 @@ export const Interactive: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Interactive concept indicator that can be clicked to toggle its state. The state cycles through: active-true → active-false → inactive → undefined → active-true.'
+        story: 'Interactive concept indicator that can be clicked to toggle its state. The state cycles through: active (green) → inactive (red) → undefined (grey) → active (green).'
       }
     }
   },

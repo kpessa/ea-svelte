@@ -5,7 +5,7 @@
   import { createEventDispatcher } from 'svelte';
 
   export let expressionToEvaluate: string = '';
-  export let conceptsSnapshot: Record<string, Concept> = {};
+  export let conceptsSnapshot: Record<string, Concept | undefined> = {};
   
   const dispatch = createEventDispatcher<{
     toggleConcept: { conceptName: string }
@@ -13,7 +13,6 @@
   
   let evaluationResult: boolean | null = null;
   let evaluationSteps: EvaluationStep[] = [];
-  let highlightedExpression: string = '';
   let conceptsInExpression: string[] = [];
   
   $: if (expressionToEvaluate) {
@@ -26,11 +25,11 @@
     }
     
     try {
-      // Extract concepts from the expression for highlighting
+      // Extract concepts from the expression
       extractConceptsFromExpression(expressionToEvaluate);
       
-      // Use the evaluateConceptExpressionWithSteps function from stores
-      const { result, steps } = evaluateConceptExpressionWithSteps(expressionToEvaluate.trim());
+      // Evaluate the expression
+      const { result, steps } = evaluateConceptExpressionWithSteps(expressionToEvaluate.trim(), conceptsSnapshot);
       evaluationResult = result;
       evaluationSteps = steps;
       
@@ -56,191 +55,100 @@
         conceptsInExpression.push(conceptName);
       }
     }
-    
-    // Generate highlighted expression
-    updateHighlightedExpression();
-  }
-  
-  function updateHighlightedExpression() {
-    let highlighted = expressionToEvaluate;
-    
-    // Replace concepts with highlighted versions
-    for (const concept of conceptsInExpression) {
-      const isActive = conceptsSnapshot[concept]?.isActive ?? false;
-      const value = conceptsSnapshot[concept]?.value ?? false;
-      const cssClass = isActive ? (value ? 'concept-true' : 'concept-false') : 'concept-inactive';
-      
-      highlighted = highlighted.replace(
-        new RegExp(`\\{${concept}\\}`, 'g'),
-        `<span class="concept-highlight ${cssClass}" data-concept="${concept}">{${concept}}</span>`
-      );
-    }
-    
-    // Replace operators with highlighted versions
-    highlighted = highlighted
-      .replace(/\bAND\b/g, '<span class="operator-highlight">AND</span>')
-      .replace(/\bOR\b/g, '<span class="operator-highlight">OR</span>')
-      .replace(/\bNOT\b/g, '<span class="operator-highlight">NOT</span>');
-    
-    // Replace delimiters with highlighted versions
-    highlighted = highlighted
-      .replace(/\[%/g, '<span class="delimiter-highlight">[%</span>')
-      .replace(/%\]/g, '<span class="delimiter-highlight">%]</span>');
-    
-    highlightedExpression = highlighted;
-  }
-  
-  function toggleConcept(conceptName: string) {
-    dispatch('toggleConcept', { conceptName });
-  }
-  
-  function handleConceptClick(event: MouseEvent) {
-    // Check if the clicked element is a concept
-    if (event.target && event.target instanceof HTMLElement) {
-      if (event.target.classList.contains('concept-highlight')) {
-        const conceptName = event.target.getAttribute('data-concept');
-        if (conceptName) {
-          toggleConcept(conceptName);
-        }
-      }
-    }
   }
   
   function handleConceptToggle(event: CustomEvent<{ name: string, newConcept: Concept | undefined }>) {
-    const { name } = event.detail;
-    toggleConcept(name);
+    const { name, newConcept } = event.detail;
+    dispatch('toggleConcept', { conceptName: name });
   }
   
   // Expose the evaluateExpression method to parent components
   export { evaluateExpression };
 </script>
 
-{#if highlightedExpression}
-  <div class="highlighted-expression" on:click={handleConceptClick}>
-    {@html highlightedExpression}
-  </div>
-{/if}
-
-{#if conceptsInExpression.length > 0}
-  <div class="concepts-in-expression">
-    <h4>Concepts in Expression</h4>
-    <div class="concept-toggles">
-      {#each conceptsInExpression as concept}
-        <div class="concept-toggle">
-          <ConceptIndicator 
-            conceptName={concept}
-            concept={conceptsSnapshot[concept]}
-            showValue={true}
-            showName={true}
-            size="medium"
-            interactive={true}
-            on:toggle={handleConceptToggle}
-          />
-        </div>
-      {/each}
+<div class="evaluator-container">
+  <!-- Display concepts in expression -->
+  {#if conceptsInExpression.length > 0}
+    <div class="concepts-in-expression">
+      <h4>Concepts in Expression</h4>
+      <div class="concept-toggles">
+        {#each conceptsInExpression as concept}
+          <div class="concept-toggle">
+            <ConceptIndicator 
+              conceptName={concept}
+              concept={conceptsSnapshot[concept]}
+              showValue={false}
+              showName={true}
+              size="medium"
+              interactive={true}
+              on:toggle={handleConceptToggle}
+            />
+          </div>
+        {/each}
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
 
-{#if evaluationResult !== null}
-  <div class="evaluation-result">
-    <span class="result-label">Result:</span>
-    <span class="result-value {evaluationResult ? 'true' : 'false'}">
-      {evaluationResult ? 'True' : 'False'}
-    </span>
-  </div>
-{/if}
+  <!-- Display evaluation result -->
+  {#if evaluationResult !== null}
+    <div class="evaluation-result">
+      <span class="result-label">Result:</span>
+      <span class="result-value {evaluationResult ? 'true' : 'false'}">
+        {evaluationResult ? 'True' : 'False'}
+      </span>
+    </div>
+  {/if}
 
-{#if evaluationSteps.length > 0}
-  <div class="evaluation-steps">
-    <h4>Step-by-Step Evaluation</h4>
-    <div class="steps-container">
-      {#each evaluationSteps as step, index}
-        <div class="evaluation-step {step.isSubExpression ? 'sub-expression' : ''}">
-          <div class="step-number">{index + 1}</div>
-          <div class="step-content">
-            <div class="step-explanation">{step.explanation}</div>
-            <div class="step-expression">
-              {#if step.isSubExpression}
-                <ConceptIndicator 
-                  conceptName={step.conceptName}
-                  concept={{ value: step.result === true, isActive: true }}
-                  showValue={true}
-                  showName={true}
-                  size="small"
-                  interactive={false}
-                />
-              {:else}
-                <code>{step.expression}</code>
-                {#if step.result !== null}
-                  <span class="result-indicator {step.result ? 'true' : 'false'}">
-                    {step.result ? 'True' : 'False'}
-                  </span>
+  <!-- Display simplified evaluation steps -->
+  {#if evaluationSteps.length > 0}
+    <div class="evaluation-steps">
+      <h4>Step-by-Step Evaluation</h4>
+      <div class="steps-container">
+        <!-- Show only key steps: original expression, concept substitutions, and final result -->
+        {#each evaluationSteps.filter((step, index) => 
+          step.isSubExpression || 
+          index === 0 || 
+          index === evaluationSteps.length - 1
+        ) as step, index}
+          <div class="evaluation-step {step.isSubExpression ? 'sub-expression' : ''}">
+            <div class="step-number">{index + 1}</div>
+            <div class="step-content">
+              <div class="step-explanation">{step.explanation}</div>
+              <div class="step-expression">
+                {#if step.isSubExpression}
+                  <ConceptIndicator 
+                    conceptName={step.conceptName || ''}
+                    concept={{ value: step.conceptName || '', isActive: step.result === true }}
+                    showValue={false}
+                    showName={true}
+                    size="small"
+                    interactive={false}
+                  />
+                {:else}
+                  <code>{step.expression}</code>
+                  {#if step.result !== null}
+                    <span class="result-indicator {step.result ? 'true' : 'false'}">
+                      {step.result ? 'True' : 'False'}
+                    </span>
+                  {/if}
                 {/if}
-              {/if}
+              </div>
             </div>
           </div>
-        </div>
-      {/each}
+        {/each}
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
-  .highlighted-expression {
-    margin-top: 10px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 1rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  
-  .concept-highlight {
-    padding: 2px 4px;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-  
-  .concept-highlight:hover {
-    opacity: 0.8;
-  }
-  
-  .concept-true {
-    background-color: #e8f5e9;
-    color: #2e7d32;
-    border: 1px solid #a5d6a7;
-  }
-  
-  .concept-false {
-    background-color: #ffebee;
-    color: #c62828;
-    border: 1px solid #ef9a9a;
-  }
-  
-  .concept-inactive {
-    background-color: #f5f5f5;
-    color: #9e9e9e;
-    border: 1px solid #e0e0e0;
-  }
-  
-  .operator-highlight {
-    color: #7b1fa2;
-    font-weight: bold;
-  }
-  
-  .delimiter-highlight {
-    color: #0288d1;
-    font-weight: bold;
+  .evaluator-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
   }
   
   .concepts-in-expression {
-    margin-top: 15px;
     padding: 10px;
     background-color: #f5f5f5;
     border-radius: 4px;
@@ -264,7 +172,6 @@
   }
   
   .evaluation-result {
-    margin-top: 15px;
     padding: 10px;
     border-radius: 4px;
     background-color: #f0f4f8;
@@ -295,7 +202,6 @@
   }
   
   .evaluation-steps {
-    margin-top: 15px;
     padding: 10px;
     background-color: #f5f5f5;
     border-radius: 4px;
@@ -303,11 +209,13 @@
   
   .steps-container {
     margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
   
   .evaluation-step {
     display: flex;
-    margin-bottom: 8px;
     padding: 8px;
     background-color: white;
     border-radius: 4px;

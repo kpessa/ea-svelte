@@ -4,7 +4,7 @@
   
   export let conceptName: string = '';
   export let concept: Concept | undefined = undefined;
-  export let showValue: boolean = true;
+  export let showValue: boolean = false;
   export let showName: boolean = true;
   export let size: 'small' | 'medium' | 'large' = 'medium';
   export let interactive: boolean = false;
@@ -19,25 +19,21 @@
   $: sizeClass = getSizeClass(size);
   $: interactiveClass = interactive ? 'interactive' : '';
   
-  // Get the concept state
-  function getConceptState(concept: Concept | undefined): 'active-true' | 'active-false' | 'inactive' {
-    if (!concept) return 'inactive';
+  // Get the concept state based on isActive and if it's defined
+  function getConceptState(concept: Concept | undefined): 'active' | 'inactive' | 'undefined' {
+    if (!concept) return 'undefined';
     
-    if (concept.isActive) {
-      return concept.value ? 'active-true' : 'active-false';
-    }
-    
-    return 'inactive';
+    return concept.isActive ? 'active' : 'inactive';
   }
   
   // Get the CSS class for the state
-  function getStateClass(state: 'active-true' | 'active-false' | 'inactive'): string {
+  function getStateClass(state: 'active' | 'inactive' | 'undefined'): string {
     switch (state) {
-      case 'active-true':
+      case 'active':
         return 'bg-green-100 text-green-800 border-green-300';
-      case 'active-false':
-        return 'bg-red-100 text-red-800 border-red-300';
       case 'inactive':
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'undefined':
       default:
         return 'bg-gray-100 text-gray-800 border-gray-300';
     }
@@ -57,13 +53,13 @@
   }
   
   // Get the icon for the state
-  function getStateIcon(state: 'active-true' | 'active-false' | 'inactive'): string {
+  function getStateIcon(state: 'active' | 'inactive' | 'undefined'): string {
     switch (state) {
-      case 'active-true':
+      case 'active':
         return '✓';
-      case 'active-false':
-        return '✗';
       case 'inactive':
+        return '✗';
+      case 'undefined':
       default:
         return '○';
     }
@@ -75,35 +71,53 @@
     
     let newConcept: Concept | undefined;
     
-    if (!concept) {
-      // If undefined, set to active-true
-      newConcept = { value: true, isActive: true };
-    } else if (concept.isActive && concept.value) {
-      // If active-true, set to active-false
-      newConcept = { value: false, isActive: true };
-    } else if (concept.isActive && !concept.value) {
-      // If active-false, set to inactive
-      newConcept = { value: false, isActive: false };
-    } else {
+    if (state === 'active') {
+      // If active, set to inactive (keep the same value)
+      newConcept = { ...concept!, isActive: false };
+    } else if (state === 'inactive') {
       // If inactive, set to undefined
       newConcept = undefined;
+    } else {
+      // If undefined, set to active
+      newConcept = { value: true, isActive: true };
     }
     
     dispatch('toggle', { name: conceptName, newConcept });
+  }
+  
+  // Get the display text for the state
+  function getStateText(state: 'active' | 'inactive' | 'undefined'): string {
+    switch (state) {
+      case 'active':
+        return 'Active';
+      case 'inactive':
+        return 'Inactive';
+      case 'undefined':
+      default:
+        return 'Undefined';
+    }
+  }
+  
+  // Format the value for display
+  function formatValue(value: any): string {
+    if (value === undefined || value === null) return 'undefined';
+    if (typeof value === 'boolean') return value ? 'True' : 'False';
+    if (typeof value === 'number') return value.toString();
+    return String(value);
   }
 </script>
 
 <div 
   class="concept-indicator {stateClass} {sizeClass} {interactiveClass}" 
-  title="{conceptName}: {concept?.value ? 'True' : 'False'} ({concept?.isActive ? 'Active' : 'Inactive'}){interactive ? ' - Click to toggle state' : ''}"
+  title="{conceptName}: {getStateText(state)}{interactive ? ' - Click to toggle state' : ''}"
   on:click={toggleConceptState}
 >
   <span class="concept-icon">{getStateIcon(state)}</span>
   {#if showName}
     <span class="concept-name">{conceptName}</span>
   {/if}
-  {#if showValue && concept?.isActive}
-    <span class="concept-value">{concept?.value ? 'True' : 'False'}</span>
+  {#if showValue && concept}
+    <span class="concept-value">{formatValue(concept.value)}</span>
   {/if}
 </div>
 

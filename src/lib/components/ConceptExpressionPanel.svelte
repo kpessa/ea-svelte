@@ -3,7 +3,7 @@
   import ConceptEvaluator from './ConceptEvaluator.svelte';
   import type { Concept } from '../types';
   
-  export let conceptsSnapshot: Record<string, Concept> = {};
+  export let conceptsSnapshot: Record<string, Concept | undefined> = {};
   export let configExpressions: { expression: string, path: string }[] = [];
   
   let expressionToEvaluate: string = '';
