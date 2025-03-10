@@ -99,18 +99,19 @@ export function evaluateConceptExpressionWithSteps(
             conceptValue: effectiveValue
         });
         
-        // Replace the concept reference with its boolean value in the expression
+        // Replace the concept reference with its boolean value
         modifiedExpression = modifiedExpression.replace(`{${conceptName}}`, effectiveValue.toString());
     }
     
-    // Add a step with all concepts replaced by their values
-    if (modifiedExpression !== processedExpression) {
-        steps.push({
-            expression: modifiedExpression,
-            result: null,
-            explanation: 'Expression with all concepts replaced by their isActive states'
-        });
-    }
+    // Convert single equals to double equals for boolean comparison
+    modifiedExpression = modifiedExpression.replace(/([^=!><])=([^=])/g, '$1==$2');
+    
+    // Add a step showing the operator conversion
+    steps.push({
+        expression: modifiedExpression,
+        result: null,
+        explanation: 'Converted = to == for proper boolean comparison'
+    });
     
     // Evaluate the expression safely
     let result: boolean;
