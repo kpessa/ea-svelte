@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { configStore } from '../services/configService';
+import { concepts } from '../stores';
 import OrdersPanel from './OrdersPanel.svelte';
-import type { Config, TabConfig } from '../types';
+import type { Config, TabConfig, Concept } from '../types';
 
 // Mock config data with orders
 const mockConfig: Config = {
@@ -43,6 +44,18 @@ const mockConfig: Config = {
                                 COMMENT: 'Monitor for hyperkalemia'
                             }
                         ]
+                    },
+                    {
+                        SECTION_NAME: 'No Concept Section',
+                        SINGLE_SELECT: 1,
+                        ORDERS: [
+                            {
+                                MNEMONIC: 'GENERAL_ORDER',
+                                ORDER_SENTENCE: 'General Order',
+                                ASC_SHORT_DESCRIPTION: 'Always visible',
+                                COMMENT: 'This section has no concept'
+                            }
+                        ]
                     }
                 ]
             } as TabConfig,
@@ -74,6 +87,25 @@ const mockConfig: Config = {
     }
 };
 
+// Mock concepts for testing section filtering
+const mockConcepts: Record<string, Concept> = {
+    'K_LOW': {
+        value: true,
+        isActive: true,
+        description: 'Patient has low potassium'
+    },
+    'K_HIGH': {
+        value: false,
+        isActive: true,
+        description: 'Patient has high potassium'
+    },
+    'MG_LOW': {
+        value: true,
+        isActive: true,
+        description: 'Patient has low magnesium'
+    }
+};
+
 const meta = {
     title: 'Components/OrdersPanel',
     component: OrdersPanel,
@@ -90,8 +122,9 @@ const meta = {
     },
     decorators: [
         (story) => {
-            // Set up the store with mock data
+            // Set up the stores with mock data
             configStore.set(mockConfig);
+            concepts.set(mockConcepts);
             return story();
         }
     ]
@@ -118,5 +151,19 @@ export const WithDebugMode: Story = {
     args: {
         selectedTab: 'POTASSIUM',
         debugMode: true
+    }
+};
+
+export const WithSectionFiltering: Story = {
+    args: {
+        selectedTab: 'POTASSIUM',
+        debugMode: true
+    },
+    play: async ({ canvasElement }) => {
+        // Get the evaluate button
+        const evaluateButton = canvasElement.querySelector('.evaluate-sections-btn') as HTMLButtonElement;
+        if (evaluateButton) {
+            evaluateButton.click();
+        }
     }
 }; 

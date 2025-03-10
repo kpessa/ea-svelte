@@ -30,6 +30,9 @@
     let filteredSections: Record<number, boolean> = {};
     let hiddenSectionCount = 0;
     
+    // Force reactivity when filtering state changes
+    $: filteredSectionsState = { filteringEnabled, sections: filteredSections, count: hiddenSectionCount };
+    
     // For inline section editing
     let sectionIndexToEdit: number | null = null;
 
@@ -37,7 +40,8 @@
     onMount(() => {
         // Add event listener for concept changes
         const handleConceptsApplied = (event: CustomEvent) => {
-            evaluateOrderSections();
+            // Only evaluate sections without enabling filtering
+            evaluateSectionsWithoutFiltering();
         };
         
         document.addEventListener('concepts-applied', handleConceptsApplied as EventListener);
@@ -60,13 +64,26 @@
 
     // Evaluate if a section should be shown based on its concept expression
     function shouldShowSection(conceptName: string | undefined, sectionIndex: number): boolean {
-        if (!filteringEnabled) return true;
-        return filteredSections[sectionIndex] !== false;
+        if (!filteredSectionsState.filteringEnabled) {
+            return true;
+        }
+        
+        // Only show sections that explicitly evaluated to true
+        const shouldShow = filteredSectionsState.sections[sectionIndex] === true;
+        return shouldShow;
     }
 
     // Evaluate concept expression using the store function
     function evaluateSectionExpression(expression: string): boolean {
-        return evaluateConceptExpression(expression);
+        // If the expression doesn't have delimiters but should, add them
+        if (!expression.includes('[%') && !expression.includes('%]')) {
+            expression = `[%${expression}%]`;
+        }
+        
+        // Use the current concepts state for evaluation
+        const result = evaluateConceptExpression(expression, $concepts);
+        console.log(`Evaluating expression: ${expression} => ${result}`);
+        return result;
     }
     
     function openExpressionPanel(expression: string) {
@@ -87,35 +104,47 @@
             return;
         }
         
-        // Enable filtering
-        filteringEnabled = true;
-        
-        // Reset filtered sections
-        filteredSections = {};
-        hiddenSectionCount = 0;
+        // Create a new object for filtered sections to trigger reactivity
+        const newFilteredSections: Record<number, boolean> = {};
+        let newHiddenCount = 0;
         
         // Evaluate each section's concept expression
         orderSections.forEach((section: OrderSection, index: number) => {
             if (section.CONCEPT_NAME) {
                 try {
                     const result = evaluateSectionExpression(section.CONCEPT_NAME);
-                    filteredSections[index] = result;
+                    newFilteredSections[index] = result;
+                    
+                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Result: ${result}`);
                     
                     if (!result) {
-                        hiddenSectionCount++;
+                        newHiddenCount++;
                     }
                 } catch (error) {
-                    filteredSections[index] = false;
-                    hiddenSectionCount++;
+                    newFilteredSections[index] = false;
+                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Error evaluating`);
+                    newHiddenCount++;
                 }
             } else {
-                filteredSections[index] = true;
+                newFilteredSections[index] = true;
+                console.log(`Section ${index}: "${section.SECTION_NAME}" - No expression - Showing by default`);
             }
         });
+
+        console.log('Filtered sections:', newFilteredSections);
+        console.log('Hidden count:', newHiddenCount);
+
+        // Update the state with new objects to trigger reactivity
+        filteredSections = newFilteredSections;
+        hiddenSectionCount = newHiddenCount;
+        
+        // Enable filtering AFTER we've evaluated all sections
+        filteringEnabled = true;
     }
     
     // Show all sections
     function showAllSections() {
+        console.log('Showing all sections');
         filteringEnabled = false;
         hiddenSectionCount = 0;
         filteredSections = {};
@@ -165,8 +194,52 @@
             return newState;
         });
         
-        // Re-evaluate sections after concept toggle
-        evaluateOrderSections();
+        // Re-evaluate sections after concept toggle, but don't enable filtering
+        // if it's not already enabled
+        evaluateSectionsWithoutFiltering();
+    }
+    
+    // Evaluate sections without enabling filtering
+    function evaluateSectionsWithoutFiltering() {
+        if (!currentTab) {
+            return;
+        }
+        
+        // Create a new object for filtered sections to trigger reactivity
+        const newFilteredSections: Record<number, boolean> = {};
+        let newHiddenCount = 0;
+        
+        // Evaluate each section's concept expression
+        orderSections.forEach((section: OrderSection, index: number) => {
+            if (section.CONCEPT_NAME) {
+                try {
+                    const result = evaluateSectionExpression(section.CONCEPT_NAME);
+                    newFilteredSections[index] = result;
+                    
+                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Result: ${result}`);
+                    
+                    if (!result) {
+                        newHiddenCount++;
+                    }
+                } catch (error) {
+                    newFilteredSections[index] = false;
+                    console.log(`Section ${index}: "${section.SECTION_NAME}" - Expression: ${section.CONCEPT_NAME} - Error evaluating`);
+                    newHiddenCount++;
+                }
+            } else {
+                newFilteredSections[index] = true;
+                console.log(`Section ${index}: "${section.SECTION_NAME}" - No expression - Showing by default`);
+            }
+        });
+
+        console.log('Filtered sections:', newFilteredSections);
+        console.log('Hidden count:', newHiddenCount);
+
+        // Update the state with new objects to trigger reactivity
+        filteredSections = newFilteredSections;
+        hiddenSectionCount = newHiddenCount;
+        
+        // Don't change the filtering state - keep it as is
     }
 </script>
 
@@ -177,25 +250,16 @@
         </div>
         <div class="filter-controls">
             <button 
-                class="filter-btn evaluate-sections-btn" 
-                on:click={evaluateOrderSections}
-                title="Show only sections with true concept expressions"
+                class="filter-btn filter-sections-btn {filteredSectionsState.filteringEnabled ? 'active' : ''}" 
+                on:click={() => filteredSectionsState.filteringEnabled ? showAllSections() : evaluateOrderSections()}
+                title={filteredSectionsState.filteringEnabled ? "Show all sections" : "Show only sections with true expressions"}
             >
-                Evaluate Order Sections
+                Filter Sections
             </button>
-            {#if filteringEnabled}
-                <button 
-                    class="filter-btn show-all-btn" 
-                    on:click={showAllSections}
-                    title="Show all order sections"
-                >
-                    Show All Orders
-                </button>
-                {#if hiddenSectionCount > 0}
-                    <span class="hidden-count">
-                        ({hiddenSectionCount} section{hiddenSectionCount !== 1 ? 's' : ''} hidden)
-                    </span>
-                {/if}
+            {#if filteredSectionsState.filteringEnabled && filteredSectionsState.count > 0}
+                <span class="hidden-count">
+                    ({filteredSectionsState.count} section{filteredSectionsState.count !== 1 ? 's' : ''} hidden)
+                </span>
             {/if}
             <button 
                 class="filter-btn debug-btn {debugMode ? 'active' : ''}" 
@@ -212,29 +276,32 @@
 
     {#if orderSections.length > 0}
         <div class="order-sections flex-1 overflow-auto">
-            {#each orderSections as section, sectionIndex}
-                {#if shouldShowSection(section.CONCEPT_NAME, sectionIndex)}
-                    <OrderSectionComponent
-                        {section}
-                        {sectionIndex}
-                        isCollapsed={collapsedSections[sectionIndex]}
-                        {debugMode}
-                        on:toggle={({ detail }) => toggleSection(detail.sectionIndex)}
-                        on:edit={({ detail }) => sectionIndexToEdit = detail.sectionIndex}
-                        on:evaluate={({ detail }) => openExpressionPanel(detail.expression)}
-                        on:toggleConcept={handleToggleConcept}
-                    />
-                    
-                    {#if sectionIndexToEdit === sectionIndex}
-                        <OrderEditor
+            {#key filteredSectionsState}
+                {#each orderSections as section, sectionIndex}
+                    {@const shouldShow = shouldShowSection(section.CONCEPT_NAME, sectionIndex)}
+                    {#if shouldShow}
+                        <OrderSectionComponent
                             {section}
-                            sectionName={section.SECTION_NAME}
-                            on:save={handleSectionUpdate}
-                            on:cancel={() => sectionIndexToEdit = null}
+                            {sectionIndex}
+                            isCollapsed={collapsedSections[sectionIndex]}
+                            {debugMode}
+                            on:toggle={({ detail }) => toggleSection(detail.sectionIndex)}
+                            on:edit={({ detail }) => sectionIndexToEdit = detail.sectionIndex}
+                            on:evaluate={({ detail }) => openExpressionPanel(detail.expression)}
+                            on:toggleConcept={handleToggleConcept}
                         />
+                        
+                        {#if sectionIndexToEdit === sectionIndex}
+                            <OrderEditor
+                                {section}
+                                sectionName={section.SECTION_NAME}
+                                on:save={handleSectionUpdate}
+                                on:cancel={() => sectionIndexToEdit = null}
+                            />
+                        {/if}
                     {/if}
-                {/if}
-            {/each}
+                {/each}
+            {/key}
         </div>
     {:else}
         <div class="no-sections flex-1">
@@ -301,14 +368,28 @@
         background-color: #e0e0e0;
     }
     
-    .evaluate-sections-btn {
-        background-color: #4caf50;
-        color: white;
-        border-color: #43a047;
+    .filter-sections-btn {
+        background-color: #f8f9fa;
+        color: #6b7280;
+        border: 1px solid #e5e7eb;
+        font-weight: normal;
+        transition: all 0.2s ease;
     }
     
-    .evaluate-sections-btn:hover {
-        background-color: #43a047;
+    .filter-sections-btn:hover {
+        background-color: #f3f4f6;
+        border-color: #d1d5db;
+    }
+    
+    .filter-sections-btn.active {
+        background-color: #e5e7eb;
+        color: #111827;
+        border-color: #d1d5db;
+        font-weight: bold;
+    }
+    
+    .filter-sections-btn.active:hover {
+        background-color: #d1d5db;
     }
     
     .show-all-btn {

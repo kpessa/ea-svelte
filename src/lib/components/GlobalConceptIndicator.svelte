@@ -9,14 +9,15 @@
   let totalConceptCount = 0;
   let unsubscribe: () => void;
   let showTooltip = false;
-  let activeConceptsList: { name: string; value: boolean }[] = [];
+  let activeConceptsList: { name: string; value: any }[] = [];
+  let inactiveConceptsList: { name: string; value: any }[] = [];
 
   // Subscribe to concepts store
   onMount(() => {
     unsubscribe = concepts.subscribe((storeValue) => {
       conceptsSnapshot = { ...storeValue };
       updateCounts();
-      updateActiveConceptsList();
+      updateConceptsLists();
     });
   });
 
@@ -31,10 +32,20 @@
     activeConceptCount = Object.values(conceptsSnapshot).filter(c => c.isActive).length;
   }
 
-  // Update the list of active concepts
-  function updateActiveConceptsList() {
+  // Update the lists of active and inactive concepts
+  function updateConceptsLists() {
+    // Get active concepts
     activeConceptsList = Object.entries(conceptsSnapshot)
       .filter(([_, concept]) => concept.isActive)
+      .map(([name, concept]) => ({
+        name,
+        value: concept.value
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+      
+    // Get inactive concepts
+    inactiveConceptsList = Object.entries(conceptsSnapshot)
+      .filter(([_, concept]) => !concept.isActive)
       .map(([name, concept]) => ({
         name,
         value: concept.value
@@ -70,22 +81,38 @@
   </div>
   <div class="indicator-icon">🧠</div>
 
-  {#if showTooltip && activeConceptsList.length > 0}
+  {#if showTooltip && (activeConceptsList.length > 0 || inactiveConceptsList.length > 0)}
     <div 
       class="concepts-tooltip"
       role="tooltip"
     >
-      <h4>Active Concepts ({activeConceptsList.length})</h4>
-      <div class="concepts-list">
-        {#each activeConceptsList as concept}
-          <div class="concept-item">
-            <span class="concept-name">{concept.name}</span>
-            <span class="concept-value {concept.value ? 'true' : 'false'}">
-              {concept.value ? 'True' : 'False'}
-            </span>
-          </div>
-        {/each}
-      </div>
+      {#if activeConceptsList.length > 0}
+        <h4>Active Concepts ({activeConceptsList.length})</h4>
+        <div class="concepts-list">
+          {#each activeConceptsList as concept}
+            <div class="concept-item">
+              <span class="concept-name">{concept.name}</span>
+              <span class="concept-value {typeof concept.value === 'boolean' ? (concept.value ? 'true' : 'false') : 'other'}">
+                {concept.value?.toString() || 'undefined'}
+              </span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      
+      {#if inactiveConceptsList.length > 0}
+        <h4>Inactive Concepts ({inactiveConceptsList.length})</h4>
+        <div class="concepts-list">
+          {#each inactiveConceptsList as concept}
+            <div class="concept-item inactive">
+              <span class="concept-name">{concept.name}</span>
+              <span class="concept-value false">
+                false
+              </span>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -211,5 +238,15 @@
   .concept-value.false {
     background-color: #ffebee;
     color: #c62828;
+  }
+
+  .concept-item.inactive {
+    opacity: 0.7;
+    background-color: #f8f8f8;
+  }
+
+  .concept-value.other {
+    background-color: #e3f2fd;
+    color: #0d47a1;
   }
 </style> 

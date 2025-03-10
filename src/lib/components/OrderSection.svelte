@@ -3,7 +3,7 @@
     import { createEventDispatcher } from 'svelte';
     import OrderItem from './OrderItem.svelte';
     import ConceptIndicator from './ConceptIndicator.svelte';
-    import { concepts } from '../stores';
+    import { concepts, evaluateConceptExpression } from '../stores';
 
     const dispatch = createEventDispatcher<{
         edit: { sectionIndex: number };
@@ -35,6 +35,7 @@
     }
 
     $: conceptDependencies = debugMode ? extractConceptsFromExpression(section.CONCEPT_NAME) : [];
+    $: evaluationResult = debugMode && section.CONCEPT_NAME ? evaluateConceptExpression(section.CONCEPT_NAME, $concepts) : null;
 
     function toggleSection() {
         dispatch('toggle', { sectionIndex });
@@ -58,6 +59,9 @@
         <div class="debug-info">
             <div class="concept-expression">
                 <span class="expression-text">{section.CONCEPT_NAME}</span>
+                <span class="evaluation-result {evaluationResult ? 'true' : 'false'}">
+                    {evaluationResult ? 'True' : 'False'}
+                </span>
                 <button 
                     class="evaluate-btn"
                     on:click={() => evaluateExpression(section.CONCEPT_NAME)}
@@ -260,5 +264,23 @@
         padding: 10px;
         text-align: center;
         color: #666;
+    }
+
+    .evaluation-result {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-weight: bold;
+        font-size: 10px;
+        text-transform: uppercase;
+    }
+
+    .evaluation-result.true {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    .evaluation-result.false {
+        background-color: #ffebee;
+        color: #c62828;
     }
 </style> 

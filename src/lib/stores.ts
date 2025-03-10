@@ -92,8 +92,8 @@ export function evaluateConceptExpressionWithSteps(
             expression: `{${conceptName}}`,
             result: effectiveValue,
             explanation: concept 
-                ? `Substituting concept "${conceptName}" with its isActive state: ${effectiveValue}` 
-                : `Concept "${conceptName}" is undefined, treating as false`,
+                ? `Concept "${conceptName}" ${concept.isActive ? 'is' : 'is not'} active` 
+                : `Concept "${conceptName}" is undefined, treating as inactive`,
             isSubExpression: true,
             conceptName,
             conceptValue: effectiveValue
