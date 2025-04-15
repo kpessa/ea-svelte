@@ -56,7 +56,20 @@
 
   // Function to clear all concepts
   function clearAllConcepts() {
-    concepts.set({});
+    console.log('[GlobalConceptIndicator] Clear All button clicked. Resetting concepts to inactive state.');
+    concepts.update(currentConcepts => {
+      const resetConcepts: Record<string, Concept> = {};
+      for (const conceptName in currentConcepts) {
+        // Keep the concept key, but reset its state
+        resetConcepts[conceptName] = {
+          value: false,    // Reset value to default
+          isActive: false, // Reset active state to default
+          description: currentConcepts[conceptName]?.description // Keep description if it exists
+        };
+      }
+      return resetConcepts;
+    });
+    
     // Dispatch an event to notify other components
     const event = new CustomEvent('concepts-applied', { bubbles: true });
     document.dispatchEvent(event);
@@ -243,7 +256,8 @@
     position: absolute;
     top: 100%;
     left: 0;
-    margin-top: 8px;
+    /* margin-top: 8px; */ /* Removed margin causing the gap */
+    padding-top: 8px; /* Add padding inside instead */
     background-color: white;
     border: 1px solid #e0e0e0;
     border-radius: 4px;

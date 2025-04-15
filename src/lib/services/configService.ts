@@ -1,46 +1,77 @@
 import { writable, get } from 'svelte/store';
 import type { Config } from '../types';
+import { concepts } from '../stores'; // Import concepts store
+import { ConceptExtractionService } from './conceptExtractionService'; // Import extraction service
 
 export const configStore = writable<Config | null>(null);
 export const currentConfigName = writable<string>('default');
 export const availableConfigs = writable<string[]>([]);
 
+// --- Helper function for concept initialization ---
+function initializeConceptsFromConfig(config: Config | null) {
+    if (!config) {
+        console.warn("Attempted to initialize concepts with null config");
+        concepts.set({}); // Clear concepts if config is null
+        return;
+    }
+    try {
+        const conceptReferences = ConceptExtractionService.extractConcepts(config);
+        ConceptExtractionService.initializeConceptsFromReferences(conceptReferences);
+    } catch (extractionError) {
+        console.error("ConfigService: Error during concept extraction/initialization:", extractionError);
+        concepts.set({}); // Clear concepts on error
+    }
+}
+// --- End Helper Function ---
+
+
 export class ConfigService {
-    static async loadConfig(path: string): Promise<Config> {
+    static async loadConfig(path: string): Promise<Config | null> { // Return type allows null
         try {
-            // First check if we have configs in local storage
             const storedConfigs = this.getStoredConfigNames();
             availableConfigs.set(storedConfigs);
             
-            // If we have a default config in local storage, use that
+            let loadedConfig: Config | null = null;
+
+            // Try loading default from local storage first
             if (storedConfigs.includes('default')) {
-                const config = this.loadConfigFromLocalStorage('default');
-                if (config) {
-                    configStore.set(config);
-                    currentConfigName.set('default');
-                    return config;
+                loadedConfig = this.loadConfigFromLocalStorage('default');
+                if (loadedConfig) {
+                     console.log("Loaded default config from localStorage.");
+                     currentConfigName.set('default');
                 }
             }
             
-            // Otherwise, load from the provided path
-            const response = await fetch(path);
-            if (!response.ok) {
-                throw new Error(`Failed to load config: ${response.statusText}`);
+            // If not found or failed, load from path
+            if (!loadedConfig) {
+                 console.log(`Default config not in localStorage or failed to load, fetching from ${path}`);
+                const response = await fetch(path);
+                if (!response.ok) {
+                    throw new Error(`Failed to load config from ${path}: ${response.statusText}`);
+                }
+                loadedConfig = await response.json() as Config;
+                console.log(`Loaded config from ${path}.`);
+                
+                // Save fetched config as default if 'default' doesn't exist
+                if (!storedConfigs.includes('default')) {
+                     console.log("Saving fetched config as default in localStorage.");
+                    this.saveConfigToLocalStorage('default', loadedConfig);
+                    availableConfigs.update(configs => [...configs, 'default']);
+                }
+                currentConfigName.set('default');
             }
-            const config = await response.json();
-            configStore.set(config);
+
+            // Set the store and initialize concepts
+            configStore.set(loadedConfig);
+            initializeConceptsFromConfig(loadedConfig); 
             
-            // Save this as the default config if we don't have one yet
-            if (!storedConfigs.includes('default')) {
-                this.saveConfigToLocalStorage('default', config);
-                availableConfigs.update(configs => [...configs, 'default']);
-            }
-            
-            currentConfigName.set('default');
-            return config;
+            return loadedConfig;
         } catch (error) {
             console.error('Error loading config:', error);
-            throw error;
+            configStore.set(null); // Ensure store is null on error
+            initializeConceptsFromConfig(null); // Clear concepts on error
+            // throw error; // Re-throwing might prevent app from loading gracefully
+            return null; // Return null on error
         }
     }
 
@@ -49,6 +80,7 @@ export class ConfigService {
             const configName = get(currentConfigName);
             configStore.set(config);
             this.saveConfigToLocalStorage(configName, config);
+            initializeConceptsFromConfig(config); // Re-initialize concepts
             console.log(`Config "${configName}" saved:`, config);
         } catch (error) {
             console.error('Error saving config:', error);
@@ -59,9 +91,10 @@ export class ConfigService {
     static saveConfigAs(configName: string, config: Config): void {
         try {
             this.saveConfigToLocalStorage(configName, config);
+            configStore.set(config); // Update store *before* initializing
             currentConfigName.set(configName);
+            initializeConceptsFromConfig(config); // Re-initialize concepts
             
-            // Update available configs list if this is a new config
             if (!get(availableConfigs).includes(configName)) {
                 availableConfigs.update(configs => [...configs, configName]);
             }
@@ -79,8 +112,10 @@ export class ConfigService {
             if (config) {
                 configStore.set(config);
                 currentConfigName.set(configName);
+                initializeConceptsFromConfig(config); // Re-initialize concepts
                 return config;
             }
+             console.warn(`Config "${configName}" not found in localStorage.`);
             return null;
         } catch (error) {
             console.error(`Error loading config "${configName}":`, error);
@@ -91,18 +126,17 @@ export class ConfigService {
     static deleteConfig(configName: string): boolean {
         try {
             localStorage.removeItem(`config_${configName}`);
-            
-            // Update available configs list
             availableConfigs.update(configs => configs.filter(name => name !== configName));
             
-            // If we deleted the current config, load another one if available
             if (get(currentConfigName) === configName) {
                 const availableConfigsList = get(availableConfigs);
                 if (availableConfigsList.length > 0) {
-                    this.loadConfigByName(availableConfigsList[0]);
+                    // Load the next available config, which will also initialize concepts
+                    this.loadConfigByName(availableConfigsList[0]); 
                 } else {
                     configStore.set(null);
                     currentConfigName.set('');
+                    initializeConceptsFromConfig(null); // Clear concepts
                 }
             }
             
@@ -120,7 +154,45 @@ export class ConfigService {
     
     private static loadConfigFromLocalStorage(name: string): Config | null {
         const storedConfig = localStorage.getItem(`config_${name}`);
-        return storedConfig ? JSON.parse(storedConfig) : null;
+        if (!storedConfig) return null;
+        try {
+            const parsed = JSON.parse(storedConfig);
+
+            // --- Stricter Validation --- 
+            if (parsed && 
+                typeof parsed === 'object' && 
+                parsed.RCONFIG && 
+                Array.isArray(parsed.RCONFIG.TABS)) {
+                
+                // Check each tab in the array
+                const allTabsValid = parsed.RCONFIG.TABS.every((tab: any, index: number) => {
+                    if (tab && typeof tab === 'object' && tab.hasOwnProperty('TAB_NAME') && tab.hasOwnProperty('TAB_KEY')) {
+                        return true; // Tab is valid
+                    } else {
+                        console.warn(`Stored config "${name}" has invalid tab object at index ${index}:`, tab);
+                        return false; // Found an invalid tab
+                    }
+                });
+
+                if (allTabsValid) {
+                    return parsed as Config;
+                } else {
+                     console.warn(`Stored config "${name}" validation failed due to invalid tab structure.`);
+                     // Optionally remove the invalid config here?
+                     // localStorage.removeItem(`config_${name}`);
+                     return null;
+                }
+            } else {
+                 console.warn(`Stored config "${name}" has invalid base structure (missing RCONFIG or TABS array).`);
+                 return null;
+            }
+            // --- End Stricter Validation --- 
+
+        } catch (e) {
+             console.error(`Error parsing stored config "${name}":`, e);
+             localStorage.removeItem(`config_${name}`); // Remove corrupted data
+             return null;
+        }
     }
     
     private static getStoredConfigNames(): string[] {

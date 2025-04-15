@@ -24,115 +24,135 @@ export function evaluateConceptExpressionWithSteps(
   providedConcepts?: Record<string, Concept | undefined>
 ): { result: boolean, steps: EvaluationStep[] } {
     const steps: EvaluationStep[] = [];
-    // Use provided concepts if available, otherwise get from store
     const conceptsSnapshot = providedConcepts || get(concepts);
     
-    // Add the initial step with the original expression
-    steps.push({
-        expression,
-        result: null,
-        explanation: 'Starting with the original expression'
-    });
+    steps.push({ expression, result: null, explanation: 'Starting with the original expression' });
     
-    // First, handle the "[%" and "%]" delimiters
+    // --- Preprocessing: Remove delimiters and replace operators --- 
     let processedExpression = expression;
-    
-    // Replace "[%" and "%]" with empty strings
     if (processedExpression.includes('[%') && processedExpression.includes('%]')) {
         processedExpression = processedExpression.replace(/\[%/g, '').replace(/%\]/g, '');
-        
-        steps.push({
-            expression: processedExpression,
-            result: null,
-            explanation: 'Removed "[%" and "%]" delimiters'
-        });
+        steps.push({ expression: processedExpression, result: null, explanation: 'Removed "[%" and "%]" delimiters' });
     }
     
-    // Replace English operators with JavaScript operators
     const operatorReplacements = [
-        { from: /\bAND\b/g, to: '&&', explanation: 'Replaced "AND" with "&&"' },
-        { from: /\bOR\b/g, to: '||', explanation: 'Replaced "OR" with "||"' },
-        { from: /\bNOT\b/g, to: '!', explanation: 'Replaced "NOT" with "!"' }
+        { from: /\bAND\b/g, to: '&&' },
+        { from: /\bOR\b/g, to: '||' },
+        { from: /\bNOT\b/g, to: '!' }
     ];
-    
     let operatorsReplaced = false;
-    let operatorExplanation = 'Replaced English operators with JavaScript operators:';
-    
-    for (const replacement of operatorReplacements) {
-        if (replacement.from.test(processedExpression)) {
-            processedExpression = processedExpression.replace(replacement.from, replacement.to);
+    for (const { from, to } of operatorReplacements) {
+        if (from.test(processedExpression)) {
+            processedExpression = processedExpression.replace(from, to);
             operatorsReplaced = true;
-            operatorExplanation += ` ${replacement.explanation};`;
         }
     }
-    
     if (operatorsReplaced) {
-        steps.push({
-            expression: processedExpression,
-            result: null,
-            explanation: operatorExplanation
-        });
+        steps.push({ expression: processedExpression, result: null, explanation: 'Replaced English operators (AND, OR, NOT)' });
     }
     
-    // Extract concept references from the expression
-    const conceptRegex = /\{([^{}]+)\}/g;
-    let modifiedExpression = processedExpression;
-    let match;
+    // --- Concept Substitution Logic for {CONCEPT} and {CONCEPT}.PROPERTY syntax ---
     
-    // Replace all concept references with their values
+    // Regex captures: 1={CONCEPT}, 2=CONCEPT_NAME, 3=PROPERTY_NAME (optional, after })
+    const conceptRegex = /(\{(\w+)\})(?:\.(\w+))?/g; 
+    const placeholders = [];
+    let match;
+
+    // Find all potential matches first
     while ((match = conceptRegex.exec(processedExpression)) !== null) {
-        const conceptName = match[1].trim();
+        placeholders.push({
+            fullMatch: match[0],        // e.g., {CONCEPT}.COUNT or {CONCEPT}
+            conceptPlaceholder: match[1], // e.g., {CONCEPT}
+            conceptName: match[2],       // e.g., CONCEPT
+            propertyName: match[3],      // e.g., COUNT or undefined
+            index: match.index
+        });
+    }
+
+    // Sort matches by index to process them in order of appearance
+    placeholders.sort((a, b) => a.index - b.index);
+
+    let lastIndex = 0;
+    let builtString = "";
+    let substitutionsMade = false;
+
+    // Iteratively build the string with substitutions
+    for (const { fullMatch, conceptName, propertyName, index } of placeholders) {
+        // Add the substring from the end of the last match to the start of this one
+        builtString += processedExpression.substring(lastIndex, index);
+
         const concept = conceptsSnapshot[conceptName];
-        
-        // If concept is undefined or not active, its value is considered false
-        const effectiveValue = concept?.isActive ?? false;
-        
-        // Add a step for each concept substitution
+        const isActive = concept?.isActive ?? false;
+        let substitutionValue: string | number | boolean = false;
+        let explanation = ``;
+
+        explanation = `Match "${fullMatch}" at index ${index}: `;
+        if (propertyName) {
+            // Property Access (e.g., {CONCEPT}.COUNT)
+            switch (propertyName.toUpperCase()) {
+                case 'COUNT':
+                    substitutionValue = isActive ? 1 : 0;
+                    explanation += `Concept "${conceptName}" is ${isActive ? 'active' : 'inactive'}, .${propertyName} evaluates to ${substitutionValue}`;
+                    break;
+                case 'VALUE':
+                    substitutionValue = isActive && concept ? concept.value : false;
+                    explanation += `Concept "${conceptName}" is ${isActive ? 'active' : 'inactive'}, .${propertyName} evaluates to ${substitutionValue}`;
+                    break;
+                default:
+                    substitutionValue = false; // Treat unknown properties as false
+                    explanation += `Concept "${conceptName}" is ${isActive ? 'active' : 'inactive'}, unknown property ".${propertyName}". Evaluating as ${substitutionValue}`;
+                    console.warn(`Unknown property ".${propertyName}" accessed for concept "${conceptName}" in expression: ${processedExpression}`);
+            }
+        } else {
+            // Simple Concept Reference (e.g., {CONCEPT})
+            substitutionValue = isActive;
+            explanation += `Concept "${conceptName}" is ${isActive ? 'active' : 'inactive'}, evaluating as ${substitutionValue}`;
+        }
+
+        // Add the calculated substitution value to the built string
+        builtString += String(substitutionValue);
+        // Update the last index to the end of the current full match ({CONCEPT}.PROP or {CONCEPT})
+        lastIndex = index + fullMatch.length; 
+        substitutionsMade = true;
+
+        // Add step for this substitution
         steps.push({
-            expression: `{${conceptName}}`,
-            result: effectiveValue,
-            explanation: concept 
-                ? `Concept "${conceptName}" ${concept.isActive ? 'is' : 'is not'} active` 
-                : `Concept "${conceptName}" is undefined, treating as inactive`,
+            expression: fullMatch, // Log the part that was matched and substituted
+            result: typeof substitutionValue === 'boolean' ? substitutionValue : null,
+            explanation: explanation,
             isSubExpression: true,
             conceptName,
-            conceptValue: effectiveValue
+            conceptValue: typeof substitutionValue === 'boolean' ? substitutionValue : undefined
         });
-        
-        // Replace the concept reference with its boolean value
-        modifiedExpression = modifiedExpression.replace(`{${conceptName}}`, effectiveValue.toString());
     }
-    
-    // Convert single equals to double equals for boolean comparison
-    modifiedExpression = modifiedExpression.replace(/([^=!><])=([^=])/g, '$1==$2');
-    
-    // Add a step showing the operator conversion
-    steps.push({
-        expression: modifiedExpression,
-        result: null,
-        explanation: 'Converted = to == for proper boolean comparison'
-    });
-    
-    // Evaluate the expression safely
+
+    // Add any remaining part of the original string after the last match
+    builtString += processedExpression.substring(lastIndex);
+
+    let modifiedExpression = builtString; // The fully substituted string
+
+    if (substitutionsMade) {
+        steps.push({ expression: modifiedExpression, result: null, explanation: 'Expression after all concept substitutions' });
+    }
+
+    // --- Final Evaluation --- 
+    // Convert single '=' to '==' for boolean comparison, avoiding (!=, ==, <=, >=)
+    const finalExpressionString = modifiedExpression.replace(/([^=!><])=([^=])/g, '$1==$2');
+
+    if (finalExpressionString !== modifiedExpression) {
+         steps.push({ expression: finalExpressionString, result: null, explanation: 'Converted standalone = to == for comparison' });
+    }
+
+
     let result: boolean;
     try {
-        // Use Function constructor to evaluate the expression
-        // This is safe as we're only evaluating boolean expressions
-        result = new Function(`return ${modifiedExpression}`)() === true;
-        
-        // Add the final evaluation step
-        steps.push({
-            expression: modifiedExpression,
-            result,
-            explanation: `Final evaluation result: ${result}`
-        });
+        // Use new Function for safer evaluation than eval()
+        result = new Function(`return ${finalExpressionString || 'false'}`)() === true; 
+        steps.push({ expression: finalExpressionString, result, explanation: `Final evaluation result: ${result}` });
     } catch (error) {
-        // If there's an error, add it as a step
-        steps.push({
-            expression: modifiedExpression,
-            result: false,
-            explanation: `Error evaluating expression: ${error instanceof Error ? error.message : 'Unknown error'}`
-        });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        steps.push({ expression: finalExpressionString, result: false, explanation: `Error evaluating final expression: ${errorMessage}` });
+        console.error(`[evaluateConceptExpression] Error evaluating expression "${finalExpressionString}": ${errorMessage}`);
         result = false;
     }
     
@@ -145,18 +165,32 @@ export function evaluateConceptExpression(expression: string, providedConcepts?:
     return result;
 }
 
-// Helper function to set concept value
-export function setConceptValue(conceptId: string, value: boolean) {
-    concepts.update(state => ({
-        ...state,
-        [conceptId]: { ...state[conceptId], value }
-    }));
+// Helper function to set concept value (typically not used directly, concepts are usually reactive)
+export function setConceptValue(conceptId: string, value: boolean, isActive: boolean = true) {
+    concepts.update(state => {
+        const currentConcept = state[conceptId] || {};
+        return {
+            ...state,
+            [conceptId]: { 
+                ...currentConcept, 
+                value, 
+                isActive // Setting value often implies it should be active
+            }
+        };
+    });
 }
 
 // Helper function to toggle concept active state
 export function toggleConceptActive(conceptId: string) {
-    concepts.update(state => ({
-        ...state,
-        [conceptId]: { ...state[conceptId], isActive: !state[conceptId]?.isActive }
-    }));
-} 
+    concepts.update(state => {
+        const currentConcept = state[conceptId];
+        if (!currentConcept) return state; // Concept doesn't exist
+        return {
+            ...state,
+            [conceptId]: { 
+                ...currentConcept, 
+                isActive: !currentConcept.isActive 
+            }
+        };
+    });
+}

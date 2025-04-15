@@ -1,6 +1,6 @@
 import type { Config } from '../types';
 import { concepts } from '../stores';
-import type { Concept, ConceptItem, ConceptReference } from '../types';
+import type { Concept, ConceptItem, ConceptReference, TabConfig, Criterion, OrderSection } from '../types';
 
 export class ConceptExtractionService {
   /**
@@ -13,11 +13,13 @@ export class ConceptExtractionService {
     
     // Process each tab in the config
     if (config?.RCONFIG?.TABS) {
-      config.RCONFIG.TABS.forEach((tab, tabIndex) => {
+      config.RCONFIG.TABS.forEach((tabItem, tabIndex) => {
+        // Cast the item to the more specific TabConfig type
+        const tab = tabItem as TabConfig;
         const tabName = tab.TAB_NAME;
         
         // Check FLAG_ON_CONCEPT if it exists
-        if ('FLAG_ON_CONCEPT' in tab) {
+        if ('FLAG_ON_CONCEPT' in tab && tab.FLAG_ON_CONCEPT) {
           this.extractConceptsFromExpression(
             tab.FLAG_ON_CONCEPT as string, 
             `Tab ${tabName} Flag`, 
@@ -52,7 +54,7 @@ export class ConceptExtractionService {
         
         // Process CRITERIA array if it exists
         if (tab.CRITERIA) {
-          tab.CRITERIA.forEach((criterion, criterionIndex) => {
+          tab.CRITERIA.forEach((criterion: Criterion, criterionIndex: number) => {
             if (criterion.CONCEPT_NAME) {
               this.extractConceptsFromExpression(
                 criterion.CONCEPT_NAME as string,
@@ -66,7 +68,7 @@ export class ConceptExtractionService {
         
         // Process ORDER_SECTIONS array if it exists
         if (tab.ORDER_SECTIONS) {
-          tab.ORDER_SECTIONS.forEach((section, sectionIndex) => {
+          tab.ORDER_SECTIONS.forEach((section: OrderSection, sectionIndex: number) => {
             if (section.CONCEPT_NAME) {
               this.extractConceptsFromExpression(
                 section.CONCEPT_NAME as string,
@@ -153,7 +155,7 @@ export class ConceptExtractionService {
         if (!newState[name]) {
           newState[name] = {
             value: false,
-            isActive: true
+            isActive: false
           };
         }
       });

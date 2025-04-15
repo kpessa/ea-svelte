@@ -36,6 +36,13 @@
     // For inline section editing
     let sectionIndexToEdit: number | null = null;
 
+    // --- ADDED: React to changes in orderSections --- 
+    $: if (orderSections) {
+        // console.log("Order sections updated, re-evaluating visibility...");
+        evaluateSectionsWithoutFiltering(); 
+    }
+    // --- END ADDED --- 
+
     // Listen for concept changes and automatically evaluate sections
     onMount(() => {
         // Add event listener for concept changes

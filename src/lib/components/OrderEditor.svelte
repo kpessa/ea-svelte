@@ -43,6 +43,7 @@
                 json(),
                 lintGutter(),
                 jsonLinter,
+                EditorView.lineWrapping,
                 EditorView.theme({
                     '&': {
                         height: '300px',

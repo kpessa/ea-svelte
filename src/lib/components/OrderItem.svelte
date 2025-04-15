@@ -21,7 +21,7 @@
             </div>
             {#if order.ORDER_SENTENCE}
                 <div class="order-sentence">
-                    {order.ORDER_SENTENCE}
+                    {@html order.ORDER_SENTENCE}
                 </div>
             {/if}
             {#if order.COMMENT}

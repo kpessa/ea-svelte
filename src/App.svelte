@@ -8,8 +8,11 @@
   import TestPatientManager from './lib/components/TestPatientManager.svelte';
   import ConceptManager from './lib/components/ConceptManager.svelte';
   import ConceptTestManager from './lib/components/ConceptTestManager.svelte';
+  import LabInput from './lib/components/LabInput.svelte';
   import { ConfigService, configStore, currentConfigName } from './lib/services/configService';
-  import type { ElectrolyteTab } from './lib/types';
+  import { ConceptExtractionService } from './lib/services/conceptExtractionService';
+  import { concepts, setConceptValue } from './lib/stores';
+  import type { ElectrolyteTab, Concept, Config } from './lib/types';
   import './app.css';
   import ConceptStatusIndicator from './lib/components/ConceptStatusIndicator.svelte';
   import CriteriaPanel from './lib/components/CriteriaPanel.svelte';
@@ -24,10 +27,25 @@
 
   onMount(async () => {
     try {
-      const config = await ConfigService.loadConfig('/config.json');
-      // Set initial tab to first available tab if exists
-      if (config.RCONFIG.TABS.length > 0) {
-        selectedTab = config.RCONFIG.TABS[0].TAB_KEY as ElectrolyteTab;
+      const loadedConfig = await ConfigService.loadConfig('/config.json');
+      if (loadedConfig) {
+            // Set initial tab
+            if (loadedConfig.RCONFIG?.TABS?.length > 0) {
+                selectedTab = loadedConfig.RCONFIG.TABS[0].TAB_KEY as ElectrolyteTab;
+            }
+
+            // --- Initialize Concepts --- 
+            try {
+                const conceptReferences = ConceptExtractionService.extractConcepts(loadedConfig);
+                ConceptExtractionService.initializeConceptsFromReferences(conceptReferences);
+            } catch (extractionError) {
+                console.error("Error during concept extraction/initialization:", extractionError);
+                // Decide how to handle this - maybe show a specific error?
+            }
+            // --- End Initialize Concepts --- 
+
+      } else {
+          throw new Error("Loaded configuration is null or invalid.");
       }
       
       // Add global event listener for debugging
@@ -42,8 +60,9 @@
     }
   });
 
-  function handleTabChange(tab: ElectrolyteTab) {
-    selectedTab = tab;
+  function handleTabChange(event: CustomEvent<string>) {
+    const tabKey = event.detail;
+    selectedTab = tabKey as ElectrolyteTab;
   }
 
   function toggleConfigEditor(fullScreen = false) {
@@ -62,6 +81,135 @@
 
   function toggleConceptManager() {
     showConceptManager = !showConceptManager;
+  }
+
+  function updateConceptsForLabValue(event: CustomEvent<{ electrolyte: string, value: number | null }>) {
+      const { electrolyte } = event.detail;
+      // Ensure value is treated as a number
+      const value = event.detail.value !== null ? parseFloat(String(event.detail.value)) : null;
+      
+      if (value === null || isNaN(value)) { // Also check for NaN after parseFloat
+          // Handle clearing logic if needed (e.g., deactivate related concepts)
+          console.log(`Clearing lab value for ${electrolyte}`);
+          // Add logic here to potentially deactivate all related concepts for this electrolyte
+          return;
+      }
+
+      const conceptsSnapshot = $concepts;
+      if (!conceptsSnapshot) {
+           console.error("Concept store snapshot is not available.");
+           return;
+      }
+      
+      let abb = '';
+      let todoConcept = '';
+
+      switch (electrolyte) {
+          case 'Magnesium':
+              abb = 'MAG';
+              todoConcept = 'EALABMAGTODO';
+              break;
+          case 'Potassium':
+              abb = 'POT';
+              todoConcept = 'EALABPOTTODO';
+              break;
+          case 'Phosphorus':
+              abb = 'PHOS';
+              todoConcept = 'EALABPHOSTODO';
+              break;
+          case 'Calcium':
+              abb = 'CALCIUM'; // Assuming Calcium uses the full name
+              todoConcept = 'EALABCALCIUMTODO';
+              break;
+          default:
+              console.error('Unknown electrolyte:', electrolyte);
+              return;
+      }
+      
+      // Activate the TODO concept
+      if (conceptsSnapshot.hasOwnProperty(todoConcept)) {
+         setConceptValue(todoConcept, true);
+      } else {
+          console.warn(`TODO Concept "${todoConcept}" not found.`);
+      }
+
+      let matchedConceptFound = false;
+
+      // --- First Pass: Deactivate all range concepts for this electrolyte ---
+      const prefix = `EALAB${abb}`;
+      for (const conceptName in conceptsSnapshot) {
+          if (conceptName.startsWith(prefix) && conceptName !== todoConcept) {
+              // Check if concept exists before attempting deactivation
+              if(conceptsSnapshot.hasOwnProperty(conceptName)) { 
+                  setConceptValue(conceptName, false, false); // Set value=false, isActive=false
+              } else {
+                   console.warn(`Concept "${conceptName}" referenced in deactivation logic but not found in store.`);
+              }
+          }
+      }
+      // --- End Deactivation Pass ---
+      
+      // --- Second Pass: Find the single matching range and activate it ---
+      for (const conceptName in conceptsSnapshot) {
+          if (conceptName.startsWith(prefix) && conceptName !== todoConcept) {
+              // Ensure concept exists before checking patterns
+              if(!conceptsSnapshot.hasOwnProperty(conceptName)) {
+                  console.warn(`Concept "${conceptName}" referenced in activation logic but not found in store.`);
+                  continue; 
+              }
+
+              // Try to match BTW pattern
+              const btwPattern = prefix + 'BTW(\\d+)AND(\\d+)'; // Explicitly create pattern string
+              const btwMatch = conceptName.match(new RegExp(btwPattern));
+              if (btwMatch) {
+                  const low = parseInt(btwMatch[1], 10) / 10;
+                  const high = parseInt(btwMatch[2], 10) / 10;
+                  const isMatch = value >= low && value <= high;
+                  if (isMatch) {
+                      setConceptValue(conceptName, true, true); // Set value=true, isActive=true
+                      matchedConceptFound = true;
+                  }
+              }
+
+              // Try to match LT pattern
+              const ltPattern = prefix + 'LT(\\d+)';
+              const ltMatch = conceptName.match(new RegExp(ltPattern));
+              if (ltMatch) {
+                  const threshold = parseInt(ltMatch[1], 10) / 10;
+                  const isMatch = value < threshold;
+                  if (isMatch) {
+                      setConceptValue(conceptName, true, true); // Set value=true, isActive=true
+                      matchedConceptFound = true;
+                  }
+              }
+
+              // Try to match GT pattern
+              const gtPattern = prefix + 'GT(\\d+)';
+              const gtMatch = conceptName.match(new RegExp(gtPattern)); 
+              if (gtMatch) {
+                  const threshold = parseInt(gtMatch[1], 10) / 10;
+                  const isMatch = value > threshold;
+                  if (isMatch) {
+                      setConceptValue(conceptName, true, true); // Set value=true, isActive=true
+                      matchedConceptFound = true;
+                  }
+              }
+              
+              // Add other patterns (LTE, GTE) here if needed
+          }
+      }
+      // --- End Activation Pass ---
+
+      if (!matchedConceptFound && value !== null) { // Check value is not null before warning
+            console.warn(`No matching range concept found for ${electrolyte} value ${value}`);
+        }
+
+      // --- Dispatch event after updates --- 
+      console.log("Dispatching concepts-applied event after lab value update.");
+      document.dispatchEvent(new CustomEvent('concepts-applied', {
+          detail: { source: 'LabInput' } // Optional detail
+      }));
+      // --- End Dispatch --- 
   }
 </script>
 
@@ -110,7 +258,11 @@
 
   <PatientHeader />
 
-  <main class="flex-grow">
+  <main class="flex-grow p-2 md:p-4">
+    <div class="container-fluid max-w-[1600px] mx-auto mb-4">
+        <LabInput on:updateLab={updateConceptsForLabValue} />
+    </div>
+    
     {#if error}
       <div class="container mx-auto p-4">
         <div class="bg-error-light text-error-dark p-4 rounded-md shadow-sm">
@@ -119,10 +271,10 @@
         </div>
       </div>
     {:else}
-      <div class="container-fluid max-w-[1600px] mx-auto p-2 md:p-4">
+      <div class="container-fluid max-w-[1600px] mx-auto">
         <div class="flex flex-col">
           <div class="mb-4">
-            <TabNavigation selectedTab={selectedTab} onTabChange={handleTabChange} />
+            <TabNavigation {selectedTab} on:tabChange={handleTabChange} />
           </div>
           
           <div>
