@@ -1,24 +1,26 @@
 <script lang="ts">
-    import type { Tab } from '../types';
+    import type { NavigationTab } from '../types';
     import { configStore } from '../services/configService';
 
-    export let selectedTab: Tab;
-    export let onTabChange: (tab: Tab) => void;
+    export let selectedTab: string | undefined;
+    export let onTabChange: (tabKey: string) => void;
 
-    $: tabs = $configStore?.RCONFIG.TABS || [];
+    $: tabs = ($configStore?.RCONFIG.TABS || []) as NavigationTab[];
 </script>
 
 <nav class="clinical-tabs bg-gray-100 border-b-2 border-clinical-blue">
     <div class="tabs-container flex" role="tablist">
         {#each tabs as tab}
-            <button
-                role="tab"
-                aria-selected={selectedTab === tab.TAB_KEY}
-                class="tab-button {selectedTab === tab.TAB_KEY ? 'active' : ''} px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-clinical-blue focus:ring-opacity-50"
-                on:click={() => onTabChange(tab.TAB_KEY)}
-            >
-                {tab.TAB_NAME}
-            </button>
+            {#if tab && tab.TAB_KEY && tab.TAB_NAME}
+                <button
+                    role="tab"
+                    aria-selected={selectedTab === tab.TAB_KEY}
+                    class="tab-button {selectedTab === tab.TAB_KEY ? 'active' : ''} px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-clinical-blue focus:ring-opacity-50"
+                    on:click={() => onTabChange(tab.TAB_KEY)}
+                >
+                    {tab.TAB_NAME}
+                </button>
+            {/if}
         {/each}
     </div>
 </nav>
