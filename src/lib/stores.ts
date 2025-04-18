@@ -30,9 +30,13 @@ export function evaluateConceptExpressionWithSteps(
     
     // --- Preprocessing: Remove delimiters and replace operators --- 
     let processedExpression = expression;
-    if (processedExpression.includes('[%') && processedExpression.includes('%]')) {
-        processedExpression = processedExpression.replace(/\[%/g, '').replace(/%\]/g, '');
+    const trimmedExpression = expression.trim();
+    if (trimmedExpression.startsWith('[%') && trimmedExpression.endsWith('%]')) {
+        processedExpression = trimmedExpression.slice(2, -2);
         steps.push({ expression: processedExpression, result: null, explanation: 'Removed "[%" and "%]" delimiters' });
+    } else {
+        // If delimiters aren't exactly at start/end, assume it's not a delimited expression
+        processedExpression = expression; 
     }
     
     const operatorReplacements = [

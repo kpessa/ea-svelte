@@ -24,6 +24,9 @@
   let debugMode = false;
   let showConceptTestManager = false;
   let showConceptManager = false;
+  let labBuckets: { label: string, conceptName: string, electrolyte: ElectrolyteTab, todoConcept: string }[] = [];
+  let labFiltersVisible = true;
+  let patientHeaderVisible = true;
 
   onMount(async () => {
     try {
@@ -59,6 +62,206 @@
       console.error('Error loading configuration:', err);
     }
   });
+
+  // Reactive block to extract lab buckets whenever concepts OR the config changes
+  $: {
+    // Ensure both concepts and config are loaded before proceeding
+    if ($concepts && $configStore) { 
+      console.log('App.svelte: Reactive block triggered. $concepts:', $concepts);
+      console.log('App.svelte: Reactive block triggered. $configStore:', $configStore); // Log current config
+      labBuckets = extractLabBuckets($concepts, $configStore); // Pass current config
+      console.log('App.svelte: Extracted labBuckets:', labBuckets);
+    }
+  }
+
+  // Function to parse concepts and create lab buckets, now config-aware
+  function extractLabBuckets(
+    conceptsSnapshot: Record<string, Concept>,
+    currentConfig: Config // Accept the current config
+  ): typeof labBuckets {
+    console.log('App.svelte: extractLabBuckets called with snapshot:', conceptsSnapshot);
+    
+    // --- Extract relevant concepts from the CURRENT config --- 
+    let relevantConceptNames: Set<string> = new Set();
+    if (currentConfig) {
+        try {
+            const conceptReferences = ConceptExtractionService.extractConcepts(currentConfig);
+            relevantConceptNames = new Set(conceptReferences.map(ref => ref.name));
+            console.log('App.svelte: Concepts relevant to current config:', relevantConceptNames);
+        } catch (error) {
+            console.error("Error extracting concepts from current config:", error);
+            // Decide if we should return empty or proceed with all concepts as fallback
+            // For now, proceed, but log the error
+        }
+    } else {
+        console.warn("App.svelte: extractLabBuckets called without a current config. Cannot filter buckets.");
+        // If no config, maybe show all? Or none? For now, let's allow all.
+        relevantConceptNames = new Set(Object.keys(conceptsSnapshot)); // Fallback to all concept keys if no config
+    }
+    // --- End config concept extraction ---
+
+    const buckets = [];
+
+    for (const conceptName in conceptsSnapshot) {
+      // --- Filter by relevance to current config --- 
+      if (!relevantConceptNames.has(conceptName)) {
+          // console.log(`Skipping concept ${conceptName}: Not relevant to current config.`); // Optional: Verbose logging
+          continue;
+      }
+      // --- End relevance filter ---
+      
+      // console.log(`Checking concept: ${conceptName}`); // Uncomment for very verbose logging
+      let match;
+      let electrolyte: ElectrolyteTab | null = null;
+      let label = '';
+      let abb = '';
+
+      // Determine electrolyte and abbreviation
+      if (conceptName.startsWith('EALABMAG')) { abb = 'MAG'; electrolyte = 'MAGNESIUM'; }
+      else if (conceptName.startsWith('EALABPOT')) { abb = 'POT'; electrolyte = 'POTASSIUM'; }
+      else if (conceptName.startsWith('EALABPHOS')) { abb = 'PHOS'; electrolyte = 'PHOSPHATE'; }
+      else { continue; } // Skip if not a lab concept
+
+      console.log(`Potential bucket concept: ${conceptName} (Electrolyte: ${electrolyte})`); // Log potential match
+
+      const todoConcept = `EALAB${abb}TODO`;
+      console.log(`  Checking for TODO concept: ${todoConcept}`); // Log TODO check
+
+      // Skip the TODO concept itself, or any concept if the corresponding TODO doesn't exist (avoids buckets for irrelevant concepts)
+      if (conceptName === todoConcept) {
+        console.log(`  Skipping ${conceptName}: It is the TODO concept itself.`);
+        continue;
+      }
+      if (!conceptsSnapshot.hasOwnProperty(todoConcept)) {
+           console.log(`  Skipping ${conceptName}: Corresponding TODO concept '${todoConcept}' not found in snapshot.`);
+           continue;
+      }
+      
+      console.log(`  Passed TODO check for ${conceptName}. Attempting pattern matching...`); // Log passing TODO check
+
+      // Try matching patterns
+      // Reset label for each concept
+      label = '';
+      
+      // Escape backslashes for RegExp constructor
+      const btwPattern = `EALAB${abb}BTW(\\d+)AND(\\d+)`;
+      console.log(`    Testing BTW pattern: /${btwPattern.replace(/\\/g, '\\')}/i against \"${conceptName}\"`);
+      let btwMatch = conceptName.match(new RegExp(btwPattern, 'i'));
+      if (btwMatch) {
+        const low = parseInt(btwMatch[1], 10) / 10; 
+        const high = parseInt(btwMatch[2], 10) / 10;
+        label = `${abb}: ${low}-${high}`;
+        console.log(`    Matched BTW: low=${low}, high=${high}, label=${label}`);
+      }
+      
+      // Check LT only if BTW didn't match
+      if (!label) { 
+        const ltPattern = `EALAB${abb}LT(\\d+)`;
+        console.log(`    Testing LT pattern: /${ltPattern.replace(/\\/g, '\\')}/i against \"${conceptName}\"`);
+        let ltMatch = conceptName.match(new RegExp(ltPattern, 'i'));
+        if (ltMatch) {
+          const threshold = parseInt(ltMatch[1], 10) / 10;
+          label = `${abb}: < ${threshold}`;
+          console.log(`    Matched LT: threshold=${threshold}, label=${label}`);
+        }
+      }
+
+      // Check GT only if BTW/LT didn't match
+      if (!label) { 
+        const gtPattern = `EALAB${abb}GT(\\d+)`;
+        console.log(`    Testing GT pattern: /${gtPattern.replace(/\\/g, '\\')}/i against \"${conceptName}\"`);
+        let gtMatch = conceptName.match(new RegExp(gtPattern, 'i'));
+        if (gtMatch) {
+          const threshold = parseInt(gtMatch[1], 10) / 10;
+          label = `${abb}: > ${threshold}`;
+          console.log(`    Matched GT: threshold=${threshold}, label=${label}`);
+        }
+      }
+              
+      // Add other patterns (LTE, GTE) here if needed, following the same pattern:
+      // if (!label) { /* check LTE */ }
+      // if (!label) { /* check GTE */ }
+
+      if (label && electrolyte) {
+        console.log(`App.svelte: Found bucket - Label: ${label}, Concept: ${conceptName}, Electrolyte: ${electrolyte}, TODO: ${todoConcept}`); // Log found bucket
+        buckets.push({
+          label,
+          conceptName,
+          electrolyte,
+          todoConcept
+        });
+      }
+    }
+    
+    // Sort buckets for consistent display
+    buckets.sort((a, b) => {
+      // Primary sort by electrolyte, secondary by label
+      if (a.electrolyte !== b.electrolyte) {
+        const order: ElectrolyteTab[] = ['MAGNESIUM', 'POTASSIUM', 'PHOSPHATE']; // Define desired order
+        return order.indexOf(a.electrolyte) - order.indexOf(b.electrolyte);
+      }
+      return a.label.localeCompare(b.label);
+    });
+    console.log('App.svelte: extractLabBuckets returning buckets:', buckets); // Log output
+    return buckets;
+  }
+
+  // Function to handle clicking a lab bucket button
+  function applyLabBucketFilter(bucket: typeof labBuckets[0]) {
+    console.log(`Applying filter for bucket: ${bucket.label}`);
+    const conceptsSnapshot = $concepts;
+    if (!conceptsSnapshot) {
+        console.error("Cannot apply lab bucket filter: concepts store snapshot is unavailable.");
+        return;
+    }
+
+    let abb = '';
+    if (bucket.electrolyte === 'MAGNESIUM') abb = 'MAG';
+    else if (bucket.electrolyte === 'POTASSIUM') abb = 'POT';
+    else if (bucket.electrolyte === 'PHOSPHATE') abb = 'PHOS';
+    else {
+        console.error(`Cannot determine abbreviation for electrolyte: ${bucket.electrolyte}`);
+        return;
+    }
+    const prefix = `EALAB${abb}`;
+    
+    // Deactivate Pass: Deactivate all concepts for this electrolyte
+    for (const conceptName in conceptsSnapshot) {
+        if (conceptName.startsWith(prefix)) {
+            if($concepts[conceptName]) { 
+                setConceptValue(conceptName, false, false); 
+            } 
+        }
+    }
+
+    // Activate Pass: Activate the specific bucket concept and its TODO concept
+    if ($concepts[bucket.conceptName]) {
+         setConceptValue(bucket.conceptName, true, true);
+         console.log(`  Activated range concept: ${bucket.conceptName}`);
+    } else {
+         console.warn(`  Bucket range concept "${bucket.conceptName}" not found in current store.`);
+    }
+    if ($concepts[bucket.todoConcept]) {
+         setConceptValue(bucket.todoConcept, true, true);
+         console.log(`  Activated TODO concept: ${bucket.todoConcept}`);
+    } else {
+        console.warn(`  Bucket TODO concept "${bucket.todoConcept}" not found in current store.`);
+    }
+
+    // Navigate to the correct tab
+    selectedTab = bucket.electrolyte;
+    console.log(`  Navigated to tab: ${selectedTab}`);
+
+    // Dispatch event for concept updates
+    document.dispatchEvent(new CustomEvent('concepts-applied', {
+        detail: { source: 'LabBucketFilter' }
+    }));
+    
+    // --- ADDED: Dispatch event to trigger section filtering in OrdersPanel --- 
+    console.log('App.svelte: Dispatching evaluate-order-sections event.');
+    document.dispatchEvent(new CustomEvent('evaluate-order-sections'));
+    // --- END ADDED ---
+  }
 
   function handleTabChange(event: CustomEvent<string>) {
     const tabKey = event.detail;
@@ -211,6 +414,14 @@
       }));
       // --- End Dispatch --- 
   }
+
+  function toggleLabFilters() {
+      labFiltersVisible = !labFiltersVisible;
+  }
+
+  function togglePatientHeader() {
+      patientHeaderVisible = !patientHeaderVisible;
+  }
 </script>
 
 <div class="app-container min-h-screen flex flex-col bg-gray-50">
@@ -256,13 +467,88 @@
     </div>
   </Navbar>
 
-  <PatientHeader />
+  <main class="flex-grow p-2 md:p-4 relative">
+    <!-- Floating Controls Container -->
+    <div class="absolute top-2 right-2 z-10 flex flex-col gap-2">
+        <!-- Patient Header Section -->
+        <div class="max-w-md w-full shadow-md">
+            <!-- Patient Header Toggle -->
+            <div 
+                class="bg-gray-200 p-1 flex justify-end items-center cursor-pointer hover:bg-gray-300 transition-colors border-b border-gray-300 rounded-t-md"
+                on:click={togglePatientHeader}
+                role="button"
+                aria-expanded={patientHeaderVisible}
+                aria-controls="patient-header-content"
+                title={patientHeaderVisible ? 'Collapse Patient Header' : 'Expand Patient Header'}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-gray-600 transform transition-transform" viewBox="0 0 20 20" fill="currentColor" class:rotate-180={!patientHeaderVisible}>
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </div>
 
-  <main class="flex-grow p-2 md:p-4">
-    <div class="container-fluid max-w-[1600px] mx-auto mb-4">
-        <LabInput on:updateLab={updateConceptsForLabValue} />
+            <!-- Conditionally Rendered Patient Header -->
+            {#if patientHeaderVisible}
+                <div id="patient-header-content" class="bg-white rounded-b-md overflow-hidden">
+                    <PatientHeader />
+                </div>
+            {/if}
+        </div>
+
+        <!-- Lab Filters Section -->
+        <div class="max-w-md w-full shadow-md">
+            <!-- Collapsible Lab Bucket Buttons Panel -->
+            <div class="border rounded-md bg-gray-100 overflow-hidden">
+                <!-- Header for the panel (always visible) -->
+                <div class="p-2 flex justify-between items-center cursor-pointer hover:bg-gray-200 transition-colors" on:click={toggleLabFilters}>
+                    <h3 class="text-sm font-semibold text-gray-700">Lab Value Filters:</h3>
+                    <button 
+                        class="btn btn-xs btn-ghost p-1"
+                        aria-label={labFiltersVisible ? 'Collapse filters' : 'Expand filters'}
+                    >
+                        <!-- Chevron Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform" viewBox="0 0 20 20" fill="currentColor" class:rotate-180={!labFiltersVisible}>
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Collapsible Content -->
+                {#if labFiltersVisible}
+                    <div class="p-2 border-t border-gray-200">
+                        <!-- Container for electrolyte groups (now stacking vertically) -->
+                        <div class="flex flex-col gap-4"> 
+                            {#each ['MAGNESIUM', 'POTASSIUM', 'PHOSPHATE'] as electrolyte (electrolyte)}
+                              {@const bucketsForElectrolyte = labBuckets.filter(b => b.electrolyte === electrolyte)}
+                              {#if bucketsForElectrolyte.length > 0}
+                                <!-- Group for a single electrolyte -->
+                                <div>  <!-- Removed flex-1 min-w-[150px] -->
+                                  <p class="text-xs font-medium text-gray-600 capitalize mb-1">{electrolyte.toLowerCase()}:</p>
+                                  <div class="flex flex-wrap gap-1">
+                                    {#each bucketsForElectrolyte as bucket (bucket.conceptName)}
+                                      {@const colorClass = 
+                                        electrolyte === 'MAGNESIUM' ? 'btn-info' : 
+                                        electrolyte === 'POTASSIUM' ? 'btn-success' : 
+                                        electrolyte === 'PHOSPHATE' ? 'btn-warning' : 
+                                        'btn-primary'} 
+                                      <button 
+                                        class="btn btn-xs {colorClass}" 
+                                        on:click={() => applyLabBucketFilter(bucket)}
+                                      >
+                                        {bucket.label}
+                                      </button>
+                                    {/each}
+                                  </div>
+                                </div>
+                              {/if}
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+            </div>
+        </div>
     </div>
-    
+
+    <!-- Main Content Area (Tabs, etc.) -->
     {#if error}
       <div class="container mx-auto p-4">
         <div class="bg-error-light text-error-dark p-4 rounded-md shadow-sm">
@@ -274,6 +560,7 @@
       <div class="container-fluid max-w-[1600px] mx-auto">
         <div class="flex flex-col">
           <div class="mb-4">
+            <!-- TabNavigation is now the first direct child here -->
             <TabNavigation {selectedTab} on:tabChange={handleTabChange} />
           </div>
           
